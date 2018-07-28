@@ -3,7 +3,7 @@ bl_info = {
     "author": "ousttrue",
     "version": (0, 1),
     "blender": (2, 79, 0),
-    "location": "File > Export > yup gltf-2.0(.glb)",
+    "location": "File > Export > yup gltf-2.0(.gltf)",
     "description": "yup gltf exporter",
     "warning": "",
     "support": "COMMUNITY",
@@ -40,20 +40,20 @@ class ExportYUP(bpy.types.Operator):
         default=True)
 
     def execute(self, context):
-        self.filepath = bpy.path.ensure_ext(self.filepath, ".glb")
+        self.filepath = bpy.path.ensure_ext(self.filepath, ".gltf")
         from . import yup
         yup.export(self.filepath, self.SelectedOnly)
         return {'FINISHED'}
 
     def invoke(self, context, event):
         if not self.filepath:
-            self.filepath = bpy.path.ensure_ext(bpy.data.filepath, ".glb")
+            self.filepath = bpy.path.ensure_ext(bpy.data.filepath, ".gltf")
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
 
 def menu_func(self, context):
-    self.layout.operator(ExportYUP.bl_idname, text="YUP GLTF (.glb)")
+    self.layout.operator(ExportYUP.bl_idname, text="YUP GLTF (.gltf)")
 
 
 def register():
