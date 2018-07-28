@@ -13,6 +13,11 @@ bl_info = {
 }
 
 
+if "bpy" in locals():
+    import importlib
+    if "yup" in locals():
+        importlib.reload(yup)
+
 import bpy
 from bpy.props import BoolProperty
 from bpy.props import EnumProperty
@@ -37,7 +42,7 @@ class ExportYUP(bpy.types.Operator):
     def execute(self, context):
         self.filepath = bpy.path.ensure_ext(self.filepath, ".glb")
         from . import yup
-        yup.export(self.filepath)
+        yup.export(self.filepath, self.SelectedOnly)
         return {'FINISHED'}
 
     def invoke(self, context, event):
