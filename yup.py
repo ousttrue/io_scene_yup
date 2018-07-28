@@ -1,6 +1,7 @@
 from typing import List
 import bpy
 import mathutils
+from . import gltf
 
 
 class MeshStore:
@@ -17,14 +18,26 @@ class MeshStore:
         self.add_triangle(t0, t1, t2)
         self.add_triangle(t2, t3, t0)
 
+    def to_gltf(self)-> gltf.GLTFMesh:
+        return gltf.GLTFMesh(
+            name='mesh',
+            primitives=[
+                gltf.GLTFMeshPrimitive(
+                    attributes={
+                    },
+                    indices=-1,
+                    material=-1,
+                    mode=gltf.GLTFMeshPrimitiveTopology.TRIANGLES,
+                    targets=[]
+                )
+            ]
+        )
 
-class Yup:
+
+class GLTFBuilder:
     def __init__(self):
+        self.gltf = gltf.GLTF()
         self.indent = ' ' * 2
-
-    def export_objects(self, objects: List[bpy.types.Object]):
-        for o in objects:
-            self.export_object(o)
 
     def export_object(self, o: bpy.types.Object, indent: str=''):
         print(f'{indent}{o.name}')
@@ -32,66 +45,68 @@ class Yup:
         # only mesh
         if o.type == 'MESH':
 
-            store=MeshStore()
-
             # copy
             new_obj = o.copy()
             new_obj.data = o.data.copy()
             bpy.data.scenes[0].objects.link(new_obj)
 
             mesh = new_obj.data
-            print('copy', new_obj, mesh.vertices)
 
             # apply modifiers exclude armature
 
             # rotate to Y-UP
 
             # export
-            mesh.update(calc_tessface=True)
-            for i, face in enumerate(mesh.tessfaces):
-
-                if len(face.vertices)==3:
-                    # triangle
-                    store.add_triangle(
-                        mesh.vertices[face.vertices[0]].co,
-                        mesh.vertices[face.vertices[1]].co,
-                        mesh.vertices[face.vertices[2]].co
-                    )
-                elif len(face.vertices)==4:
-                    # quad
-                    store.add_quadrangle(
-                        mesh.vertices[face.vertices[0]].co,
-                        mesh.vertices[face.vertices[1]].co,
-                        mesh.vertices[face.vertices[2]].co,
-                        mesh.vertices[face.vertices[3]].co
-                    )
-                else:
-                    raise Exception(f'face.vertices: {len(face.vertices)}')
-
-            print(store.positions)
+            self.export_mesh(mesh)
 
         for child in o.children:
             self.export_object(child, indent+self.indent)
 
-    def write_to(self, path: str):
-        from .gltf import GLTF
-        import io
+    def export_mesh(self, mesh: bpy.types.Mesh):
 
-        gltf = GLTF()
+        mesh.update(calc_tessface=True)
+        store = MeshStore()
+        for i, face in enumerate(mesh.tessfaces):
 
-        with io.open(path, 'wb') as f:
-            f.write(gltf.to_json().encode('utf-8'))
+            if len(face.vertices) == 3:
+                # triangle
+                store.add_triangle(
+                    mesh.vertices[face.vertices[0]].co,
+                    mesh.vertices[face.vertices[1]].co,
+                    mesh.vertices[face.vertices[2]].co
+                )
+            elif len(face.vertices) == 4:
+                # quad
+                store.add_quadrangle(
+                    mesh.vertices[face.vertices[0]].co,
+                    mesh.vertices[face.vertices[1]].co,
+                    mesh.vertices[face.vertices[2]].co,
+                    mesh.vertices[face.vertices[3]].co
+                )
+            else:
+                raise Exception(f'face.vertices: {len(face.vertices)}')
+
+        self.gltf.meshes.append(store.to_gltf())
+
+
+def get_objects(selected_only: bool):
+    if selected_only:
+        return bpy.context.selected_objects
+    else:
+        return bpy.data.scenes[0].objects
 
 
 def export(path: str, selected_only: bool):
-    yup = Yup()
 
     # object mode
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
 
-    if selected_only:
-        yup.export_objects(bpy.context.selected_objects)
-    else:
-        yup.export_objects(bpy.data.scenes[0].objects)
+    objects = get_objects(selected_only)
 
-    yup.write_to(path)
+    builder = GLTFBuilder()
+    for o in objects:
+        builder.export_object(o)
+
+    import io
+    with io.open(path, 'wb') as f:
+        f.write(builder.gltf.to_json().encode('utf-8'))
