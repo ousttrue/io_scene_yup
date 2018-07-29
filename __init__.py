@@ -41,8 +41,12 @@ class ExportYUP(bpy.types.Operator):
 
     def execute(self, context):
         self.filepath = bpy.path.ensure_ext(self.filepath, ".gltf")
+        import pathlib
+        path=pathlib.Path(self.filepath).absolute()
+
         from . import yup
-        yup.export(self.filepath, self.SelectedOnly)
+        yup.export(path, self.SelectedOnly)
+
         return {'FINISHED'}
 
     def invoke(self, context, event):

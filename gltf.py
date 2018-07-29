@@ -1,15 +1,25 @@
 from typing import NamedTuple, List, Dict
-from enum import Enum
+from enum import Enum, auto
 from collections import namedtuple
 import json
 
 
+class ValueEnum(Enum):
+    pass
+
+
+class NameEnum(Enum):
+    pass
+
+
 class GLTFEncoder(json.JSONEncoder):
     def default(self, o):
-        if isinstance(o, GLTFMeshPrimitiveTopology):
+        if isinstance(o, ValueEnum):
             return o.value
+        elif isinstance(o, NameEnum):
+            return o.name
         else:
-            return JSONEncoder.default(self, o)
+            return json.JSONEncoder.default(self, o)
 
 
 def recursive_asdict(o):
@@ -37,7 +47,56 @@ class GLTFAsset(NamedTuple):
     version: str = '2.0'
 
 
-class GLTFMeshPrimitiveTopology(Enum):
+class GLTFBUffer(NamedTuple):
+    uri: str
+    byteLength: int
+
+
+class GLTFBufferView(NamedTuple):
+    buffer: int
+    byteOffset: int
+    byteLength: int
+    #byteStride: int
+    # target:
+
+
+class GLTFAccessorComponentType(ValueEnum):
+    BYTE = 5120
+    UNSIGNED_BYTE = 5121
+    SHORT = 5122
+    UNSIGNED_SHORT = 5123
+    UNSIGNED_INT = 5125
+    FLOAT = 5126
+
+
+def format_to_componentType(t: str)->GLTFAccessorComponentType:
+    if t == 'f':
+        return GLTFAccessorComponentType.FLOAT
+    elif t == 'I':
+        return GLTFAccessorComponentType.UNSIGNED_INT
+    else:
+        raise NotImplementedError()
+
+
+class GLTFAccessorType(NameEnum):
+    SCALAR = 1
+    VEC2 = 2
+    VEC3 = 3
+    VEC4 = 4
+    #MAT2 = auto()
+    MAT3 = 9
+    MAT4 = 16
+
+
+class GLTFAccessor(NamedTuple):
+    bufferView: int
+    byteOffset: int
+    componentType: GLTFAccessorComponentType
+    type: GLTFAccessorType
+    count: int
+
+
+class GLTFMeshPrimitiveTopology(ValueEnum):
     POINTS = 0
     LINES = 1
     LINE_LOOP = 2
@@ -64,6 +123,9 @@ class GLTFMesh(NamedTuple):
 class GLTF(NamedTuple):
     extensionsUsed: List[str] = []
     asset: GLTFAsset = GLTFAsset()
+    buffers: List[GLTFBUffer] = []
+    bufferViews: List[GLTFBufferView] = []
+    accessors: List[GLTFAccessor] = []
     meshes: List[GLTFMesh] = []
 
     def to_json(self):

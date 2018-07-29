@@ -1,43 +1,58 @@
-from typing import List
 import bpy
 import mathutils
+import array
+import io
+import pathlib
+from typing import List, NamedTuple
 from . import gltf
+from .binarybuffer import BinaryBuffer
 
 
 class MeshStore:
 
-    def __init__(self):
-        self.positions: List[mathutils.Vector] = []
+    def __init__(self, name: str)->None:
+        self.name = name
+        self.positions: array.array = array.array('f')
+        self.indices: array.array = array.array('I')
+
+    def add_vertex(self, v: mathutils.Vector):
+        self.positions.append(v.x)
+        self.positions.append(v.y)
+        self.positions.append(v.z)
 
     def add_triangle(self, t0: mathutils.Vector, t1: mathutils.Vector, t2: mathutils.Vector):
-        self.positions.append(t0)
-        self.positions.append(t1)
-        self.positions.append(t2)
+        index = int(len(self.positions)/3)
+        self.add_vertex(t0)
+        self.add_vertex(t1)
+        self.add_vertex(t2)
+        self.indices.append(index)
+        self.indices.append(index+1)
+        self.indices.append(index+2)
 
     def add_quadrangle(self, t0, t1, t2, t3):
-        self.add_triangle(t0, t1, t2)
-        self.add_triangle(t2, t3, t0)
+        index = int(len(self.positions)/3)
+        self.add_vertex(t0)
+        self.add_vertex(t1)
+        self.add_vertex(t2)
+        self.add_vertex(t3)
 
-    def to_gltf(self)-> gltf.GLTFMesh:
-        return gltf.GLTFMesh(
-            name='mesh',
-            primitives=[
-                gltf.GLTFMeshPrimitive(
-                    attributes={
-                    },
-                    indices=-1,
-                    material=-1,
-                    mode=gltf.GLTFMeshPrimitiveTopology.TRIANGLES,
-                    targets=[]
-                )
-            ]
-        )
+        self.indices.append(index)
+        self.indices.append(index+1)
+        self.indices.append(index+2)
+
+        self.indices.append(index+2)
+        self.indices.append(index+3)
+        self.indices.append(index)
 
 
 class GLTFBuilder:
     def __init__(self):
         self.gltf = gltf.GLTF()
         self.indent = ' ' * 2
+        self.meshes: List[MeshStore] = []
+        self.buffers: List[BinaryBuffer] = []
+        self.views: List[gltf.GLTFBufferView] = []
+        self.accessors: List[gltf.GLTFAccessor] = []
 
     def export_object(self, o: bpy.types.Object, indent: str=''):
         print(f'{indent}{o.name}')
@@ -65,7 +80,7 @@ class GLTFBuilder:
     def export_mesh(self, mesh: bpy.types.Mesh):
 
         mesh.update(calc_tessface=True)
-        store = MeshStore()
+        store = MeshStore(mesh.name)
         for i, face in enumerate(mesh.tessfaces):
 
             if len(face.vertices) == 3:
@@ -86,7 +101,73 @@ class GLTFBuilder:
             else:
                 raise Exception(f'face.vertices: {len(face.vertices)}')
 
-        self.gltf.meshes.append(store.to_gltf())
+        self.meshes.append(store)
+
+    def add_buffer(self, path: pathlib.Path)->int:
+        index = len(self.buffers)
+        self.buffers.append(BinaryBuffer(index))
+        return index
+
+    def push_bytes(self, buffer_index: int, data: array.array, element_count: int)->int:
+        # append view
+        view_index = len(self.views)
+        view = self.buffers[buffer_index].append(data.tobytes())
+        self.views.append(view)
+        # append accessor
+        accessor_index = len(self.accessors)
+        accessor = gltf.GLTFAccessor(
+            bufferView=view_index,
+            byteOffset=0,
+            componentType=gltf.format_to_componentType(data.typecode),
+            type=gltf.GLTFAccessorType(element_count),
+            count=int(len(data)/element_count)
+        )
+        self.accessors.append(accessor)
+        return accessor_index
+
+    def write_to(self, gltf_path: pathlib.Path):
+        # create buffer
+        bin_path = gltf_path.parent / (gltf_path.stem + ".bin")
+        buffer_index = self.add_buffer(bin_path)
+
+        meshes: List[gltf.GLTFMesh] = []
+        for mesh in self.meshes:
+            position_accessor_index = self.push_bytes(
+                buffer_index, mesh.positions, 3)
+            indices_accessor_index = self.push_bytes(
+                buffer_index, mesh.indices, 1)
+            #print(position_accessor_index, indices_accessor_index)
+            gltf_mesh = gltf.GLTFMesh(
+                name=mesh.name,
+                primitives=[
+                    gltf.GLTFMeshPrimitive(
+                        attributes={
+                            'POSITION': position_accessor_index
+                        },
+                        indices=indices_accessor_index,
+                        material=-1,
+                        mode=gltf.GLTFMeshPrimitiveTopology.TRIANGLES,
+                        targets=[]
+                    )
+                ]
+            )
+            meshes.append(gltf_mesh)
+
+        uri = bin_path.relative_to(gltf_path.parent)
+        gltf_root = gltf.GLTF(
+            buffers=[gltf.GLTFBUffer(str(uri), len(self.buffers[0].data))],
+            bufferViews=self.views,
+            accessors=self.accessors,
+            meshes=meshes
+        )
+
+        # write bin
+        with bin_path.open('wb') as f:
+            f.write(self.buffers[buffer_index].data)
+
+        # write gltf
+        with gltf_path.open('wb') as f:
+            f.write(gltf_root.to_json().encode('utf-8'))
 
 
 def get_objects(selected_only: bool):
@@ -96,7 +177,7 @@ def get_objects(selected_only: bool):
         return bpy.data.scenes[0].objects
 
 
-def export(path: str, selected_only: bool):
+def export(path: pathlib.Path, selected_only: bool):
 
     # object mode
     bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
@@ -107,6 +188,4 @@ def export(path: str, selected_only: bool):
     for o in objects:
         builder.export_object(o)
 
-    import io
-    with io.open(path, 'wb') as f:
-        f.write(builder.gltf.to_json().encode('utf-8'))
+    builder.write_to(path)
