@@ -1,4 +1,4 @@
-from typing import NamedTuple, List, Dict
+from typing import NamedTuple, List, Dict, Tuple, Optional
 from enum import Enum, auto
 from collections import namedtuple
 import json
@@ -26,6 +26,9 @@ def recursive_asdict(o):
     if isinstance(o, tuple) and hasattr(o, '_asdict'):
         obj = {}
         for k, v in o._asdict().items():
+            if v is None:
+                # skip
+                continue
             if isinstance(v, (list, tuple)):
                 if len(v) == 0:
                     # skip empty list
@@ -53,7 +56,7 @@ class GLTFBUffer(NamedTuple):
 
 
 class GLTFBufferView(NamedTuple):
-    buffer: int
+    buffer: Optional[int]
     byteOffset: int
     byteLength: int
     #byteStride: int
@@ -89,12 +92,13 @@ class GLTFAccessorType(NameEnum):
 
 
 class GLTFAccessor(NamedTuple):
-    bufferView: int
+    bufferView: Optional[int]
     byteOffset: int
     componentType: GLTFAccessorComponentType
     type: GLTFAccessorType
     count: int
-
+    min: List[float]
+    max: List[float]
 
 class GLTFMeshPrimitiveTopology(ValueEnum):
     POINTS = 0
@@ -108,8 +112,8 @@ class GLTFMeshPrimitiveTopology(ValueEnum):
 
 class GLTFMeshPrimitive(NamedTuple):
     attributes: Dict[str, int]
-    indices: int
-    material: int
+    indices: Optional[int]
+    material: Optional[int]
     mode: GLTFMeshPrimitiveTopology
     targets: List[Dict[str, int]]
 
@@ -120,6 +124,17 @@ class GLTFMesh(NamedTuple):
     weights: List[int] = []
 
 
+class GLTFNode(NamedTuple):
+    name: str
+    mesh: Optional[int]
+    children: List[int] = []
+
+
+class GLTFScene(NamedTuple):
+    name: str
+    nodes: List[int] = []
+
+
 class GLTF(NamedTuple):
     extensionsUsed: List[str] = []
     asset: GLTFAsset = GLTFAsset()
@@ -127,6 +142,8 @@ class GLTF(NamedTuple):
     bufferViews: List[GLTFBufferView] = []
     accessors: List[GLTFAccessor] = []
     meshes: List[GLTFMesh] = []
+    nodes: List[GLTFNode] = []
+    scenes: List[GLTFScene] = []
 
     def to_json(self):
         return json.dumps(recursive_asdict(self), cls=GLTFEncoder, indent=2)

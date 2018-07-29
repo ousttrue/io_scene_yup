@@ -3,46 +3,18 @@ import mathutils
 import array
 import io
 import pathlib
-from typing import List, NamedTuple
+from typing import List, NamedTuple, Optional
 from . import gltf
 from .binarybuffer import BinaryBuffer
+from .meshstore import MeshStore
 
 
-class MeshStore:
-
-    def __init__(self, name: str)->None:
+class GLTFBuilderNode:
+    def __init__(self, index: int, name: str)->None:
+        self.index = index
         self.name = name
-        self.positions: array.array = array.array('f')
-        self.indices: array.array = array.array('I')
-
-    def add_vertex(self, v: mathutils.Vector):
-        self.positions.append(v.x)
-        self.positions.append(v.y)
-        self.positions.append(v.z)
-
-    def add_triangle(self, t0: mathutils.Vector, t1: mathutils.Vector, t2: mathutils.Vector):
-        index = int(len(self.positions)/3)
-        self.add_vertex(t0)
-        self.add_vertex(t1)
-        self.add_vertex(t2)
-        self.indices.append(index)
-        self.indices.append(index+1)
-        self.indices.append(index+2)
-
-    def add_quadrangle(self, t0, t1, t2, t3):
-        index = int(len(self.positions)/3)
-        self.add_vertex(t0)
-        self.add_vertex(t1)
-        self.add_vertex(t2)
-        self.add_vertex(t3)
-
-        self.indices.append(index)
-        self.indices.append(index+1)
-        self.indices.append(index+2)
-
-        self.indices.append(index+2)
-        self.indices.append(index+3)
-        self.indices.append(index)
+        self.children: List[GLTFBuilderNode] = []
+        self.mesh: Optional[int] = None
 
 
 class GLTFBuilder:
@@ -53,9 +25,18 @@ class GLTFBuilder:
         self.buffers: List[BinaryBuffer] = []
         self.views: List[gltf.GLTFBufferView] = []
         self.accessors: List[gltf.GLTFAccessor] = []
+        self.nodes: List[GLTFBuilderNode] = []
+        self.root_nodes: List[GLTFBuilderNode] = []
 
-    def export_object(self, o: bpy.types.Object, indent: str=''):
-        print(f'{indent}{o.name}')
+    def export_objects(self, objects: List[bpy.types.Object]):
+        for o in objects:
+            root_node = self.export_object(o)
+            self.root_nodes.append(root_node)
+
+    def export_object(self, o: bpy.types.Object, indent: str='')->GLTFBuilderNode:
+
+        node = GLTFBuilderNode(len(self.nodes), o.name)
+        self.nodes.append(node)
 
         # only mesh
         if o.type == 'MESH':
@@ -72,12 +53,16 @@ class GLTFBuilder:
             # rotate to Y-UP
 
             # export
-            self.export_mesh(mesh)
+            mesh_index = self.export_mesh(mesh)
+            node.mesh = mesh_index
 
         for child in o.children:
-            self.export_object(child, indent+self.indent)
+            child_node = self.export_object(child, indent+self.indent)
+            node.children.append(child_node)
 
-    def export_mesh(self, mesh: bpy.types.Mesh):
+        return node
+
+    def export_mesh(self, mesh: bpy.types.Mesh)->int:
 
         mesh.update(calc_tessface=True)
         store = MeshStore(mesh.name)
@@ -101,7 +86,9 @@ class GLTFBuilder:
             else:
                 raise Exception(f'face.vertices: {len(face.vertices)}')
 
+        index = len(self.meshes)
         self.meshes.append(store)
+        return index
 
     def add_buffer(self, path: pathlib.Path)->int:
         index = len(self.buffers)
@@ -109,10 +96,28 @@ class GLTFBuilder:
         return index
 
     def push_bytes(self, buffer_index: int, data: array.array, element_count: int)->int:
+        count = int(len(data)/element_count)
         # append view
         view_index = len(self.views)
         view = self.buffers[buffer_index].append(data.tobytes())
         self.views.append(view)
+        # min max
+        min: List[float] = []
+        max: List[float] = []
+        if data.typecode == 'f':
+            min = [float('inf')] * element_count
+            max = [float('-inf')] * element_count
+
+            k = 0
+            for i in range(count):
+                for j in range(element_count):
+                    value = data[k]
+                    if value < min[j]:
+                        min[j] = value
+                    if value > max[j]:
+                        max[j] = value
+                    k += 1
+
         # append accessor
         accessor_index = len(self.accessors)
         accessor = gltf.GLTFAccessor(
@@ -120,7 +125,9 @@ class GLTFBuilder:
             byteOffset=0,
             componentType=gltf.format_to_componentType(data.typecode),
             type=gltf.GLTFAccessorType(element_count),
-            count=int(len(data)/element_count)
+            count=count,
+            min=min,
+            max=max
         )
         self.accessors.append(accessor)
         return accessor_index
@@ -145,7 +152,7 @@ class GLTFBuilder:
                             'POSITION': position_accessor_index
                         },
                         indices=indices_accessor_index,
-                        material=-1,
+                        material=None,
                         mode=gltf.GLTFMeshPrimitiveTopology.TRIANGLES,
                         targets=[]
                     )
@@ -153,12 +160,26 @@ class GLTFBuilder:
             )
             meshes.append(gltf_mesh)
 
+        def to_gltf_node(node: GLTFBuilderNode):
+            return gltf.GLTFNode(
+                name=node.name,
+                children=[child.index for child in node.children],
+                mesh=node.mesh
+            )
+
+        scene = gltf.GLTFScene(
+            name='scene',
+            nodes = [node.index for node in self.root_nodes]
+        )
+
         uri = bin_path.relative_to(gltf_path.parent)
         gltf_root = gltf.GLTF(
             buffers=[gltf.GLTFBUffer(str(uri), len(self.buffers[0].data))],
             bufferViews=self.views,
             accessors=self.accessors,
-            meshes=meshes
+            meshes=meshes,
+            nodes=[to_gltf_node(node) for node in self.nodes],
+            scenes=[scene]
         )
 
         # write bin
@@ -185,7 +206,6 @@ def export(path: pathlib.Path, selected_only: bool):
     objects = get_objects(selected_only)
 
     builder = GLTFBuilder()
-    for o in objects:
-        builder.export_object(o)
+    builder.export_objects(objects)
 
     builder.write_to(path)
