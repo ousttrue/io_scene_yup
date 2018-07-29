@@ -16,7 +16,7 @@ bl_info = {
 if "bpy" in locals():
     import importlib
     if "yup" in locals():
-        importlib.reload(yup)
+        importlib.reload(yup) # type: ignore
 
 import bpy
 from bpy.props import BoolProperty

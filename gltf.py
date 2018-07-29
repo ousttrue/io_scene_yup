@@ -96,7 +96,7 @@ class GLTFAccessor(NamedTuple):
     byteOffset: int
     componentType: GLTFAccessorComponentType
     type: GLTFAccessorType
-    count: int
+    count: int # type: ignore
     min: List[float]
     max: List[float]
 
