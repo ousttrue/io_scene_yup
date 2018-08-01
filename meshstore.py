@@ -18,7 +18,8 @@ class MeshStore:
         self.name = name
         self.positions: Any = (Vector3 * len(vertices))()
         for i, pos in enumerate(vertices):
-            self.positions[i] = Vector3(pos.x, pos.y, pos.z)
+            #self.positions[i] = Vector3(pos.x, pos.y, pos.z)
+            self.positions[i] = Vector3(pos.x, pos.z, -pos.y)
         self.indices: array.array = array.array('I')
         # min max
         self.min: List[float] = [float('inf')] * 3 
