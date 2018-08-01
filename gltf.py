@@ -72,11 +72,13 @@ class GLTFAccessorComponentType(ValueEnum):
     FLOAT = 5126
 
 
-def format_to_componentType(t: str)->GLTFAccessorComponentType:
+def format_to_componentType(t: str)->Tuple[GLTFAccessorComponentType, int]:
     if t == 'f':
-        return GLTFAccessorComponentType.FLOAT
+        return GLTFAccessorComponentType.FLOAT, 1
     elif t == 'I':
-        return GLTFAccessorComponentType.UNSIGNED_INT
+        return GLTFAccessorComponentType.UNSIGNED_INT, 1
+    elif t == 'T{<f:x:<f:y:<f:z:}':
+        return GLTFAccessorComponentType.FLOAT, 3
     else:
         raise NotImplementedError()
 
@@ -96,9 +98,10 @@ class GLTFAccessor(NamedTuple):
     byteOffset: int
     componentType: GLTFAccessorComponentType
     type: GLTFAccessorType
-    count: int # type: ignore
+    count: int  # type: ignore
     min: List[float]
     max: List[float]
+
 
 class GLTFMeshPrimitiveTopology(ValueEnum):
     POINTS = 0

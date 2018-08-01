@@ -34,7 +34,7 @@ class ExportYUP(bpy.types.Operator):
 
     # Export options
 
-    SelectedOnly = BoolProperty(
+    selectedonly = BoolProperty(
         name="Export Selected Objects Only",
         description="Export only selected objects",
         default=True)
@@ -45,7 +45,7 @@ class ExportYUP(bpy.types.Operator):
         path=pathlib.Path(self.filepath).absolute()
 
         from . import yup
-        yup.export(path, self.SelectedOnly)
+        yup.export(path, self.selectedonly)
 
         return {'FINISHED'}
 

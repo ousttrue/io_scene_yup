@@ -65,24 +65,17 @@ class GLTFBuilder:
     def export_mesh(self, mesh: bpy.types.Mesh)->int:
 
         mesh.update(calc_tessface=True)
-        store = MeshStore(mesh.name)
-        for i, face in enumerate(mesh.tessfaces):
+        store = MeshStore(mesh.name, [v.co for v in mesh.vertices])
+        i = 0
+        for face in mesh.tessfaces:
 
             if len(face.vertices) == 3:
                 # triangle
-                store.add_triangle(
-                    mesh.vertices[face.vertices[0]].co,
-                    mesh.vertices[face.vertices[1]].co,
-                    mesh.vertices[face.vertices[2]].co
-                )
+                store.add_triangle(face.vertices[0], face.vertices[1], face.vertices[2])
             elif len(face.vertices) == 4:
                 # quad
-                store.add_quadrangle(
-                    mesh.vertices[face.vertices[0]].co,
-                    mesh.vertices[face.vertices[1]].co,
-                    mesh.vertices[face.vertices[2]].co,
-                    mesh.vertices[face.vertices[3]].co
-                )
+                store.add_triangle(face.vertices[0], face.vertices[1], face.vertices[2])
+                store.add_triangle(face.vertices[2], face.vertices[3], face.vertices[0])
             else:
                 raise Exception(f'face.vertices: {len(face.vertices)}')
 
@@ -95,37 +88,21 @@ class GLTFBuilder:
         self.buffers.append(BinaryBuffer(index))
         return index
 
-    def push_bytes(self, buffer_index: int, data: array.array, element_count: int)->int:
-        count = int(len(data)/element_count)
+    def push_bytes(self, buffer_index: int, values: memoryview, min: List[float], max: List[float])->int:
+        componentType, element_count = gltf.format_to_componentType(values.format)
         # append view
         view_index = len(self.views)
-        view = self.buffers[buffer_index].append(data.tobytes())
+        view = self.buffers[buffer_index].add_values(values.tobytes())
         self.views.append(view)
-        # min max
-        min: List[float] = []
-        max: List[float] = []
-        if data.typecode == 'f':
-            min = [float('inf')] * element_count
-            max = [float('-inf')] * element_count
-
-            k = 0
-            for i in range(count):
-                for j in range(element_count):
-                    value = data[k]
-                    if value < min[j]:
-                        min[j] = value
-                    if value > max[j]:
-                        max[j] = value
-                    k += 1
 
         # append accessor
         accessor_index = len(self.accessors)
         accessor = gltf.GLTFAccessor(
             bufferView=view_index,
             byteOffset=0,
-            componentType=gltf.format_to_componentType(data.typecode),
+            componentType=componentType,
             type=gltf.GLTFAccessorType(element_count),
-            count=count,
+            count=len(values),
             min=min,
             max=max
         )
@@ -140,9 +117,9 @@ class GLTFBuilder:
         meshes: List[gltf.GLTFMesh] = []
         for mesh in self.meshes:
             position_accessor_index = self.push_bytes(
-                buffer_index, mesh.positions, 3)
+                buffer_index, memoryview(mesh.positions), mesh.min, mesh.max)
             indices_accessor_index = self.push_bytes(
-                buffer_index, mesh.indices, 1)
+                buffer_index, memoryview(mesh.indices), None, None)
             #print(position_accessor_index, indices_accessor_index)
             gltf_mesh = gltf.GLTFMesh(
                 name=mesh.name,
@@ -201,7 +178,8 @@ def get_objects(selected_only: bool):
 def export(path: pathlib.Path, selected_only: bool):
 
     # object mode
-    bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+    if bpy.context.mode!='OBJECT':
+        bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
 
     objects = get_objects(selected_only)
 

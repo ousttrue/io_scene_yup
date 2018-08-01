@@ -7,7 +7,7 @@ class BinaryBuffer:
         self.index = index
         self.data = bytearray()
 
-    def append(self, data: bytes) -> gltf.GLTFBufferView:
+    def add_values(self, data: bytes) -> gltf.GLTFBufferView:
         offset = len(self.data)
         self.data += data
         return gltf.GLTFBufferView(
