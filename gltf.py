@@ -79,6 +79,8 @@ def format_to_componentType(t: str)->Tuple[GLTFAccessorComponentType, int]:
         return GLTFAccessorComponentType.UNSIGNED_INT, 1
     elif t == 'T{<f:x:<f:y:<f:z:}':
         return GLTFAccessorComponentType.FLOAT, 3
+    elif t == 'T{<f:x:<f:y:}':
+        return GLTFAccessorComponentType.FLOAT, 2
     else:
         raise NotImplementedError()
 

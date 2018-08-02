@@ -64,20 +64,17 @@ class GLTFBuilder:
 
     def export_mesh(self, mesh: bpy.types.Mesh)->int:
 
-        mesh.update(calc_tessface=True)
-        store = MeshStore(mesh.name, mesh.vertices)
-        i = 0
-        for face in mesh.tessfaces:
+        def get_texture_layer(layers):
+            for l in layers:
+                if l.active:
+                    return l
 
-            if len(face.vertices) == 3:
-                # triangle
-                store.add_triangle(face.vertices[0], face.vertices[1], face.vertices[2])
-            elif len(face.vertices) == 4:
-                # quad
-                store.add_triangle(face.vertices[0], face.vertices[1], face.vertices[2])
-                store.add_triangle(face.vertices[2], face.vertices[3], face.vertices[0])
-            else:
-                raise Exception(f'face.vertices: {len(face.vertices)}')
+        mesh.update(calc_tessface=True)
+        uv_texture_faces=get_texture_layer(mesh.tessface_uv_textures)
+        store = MeshStore(mesh.name, mesh.vertices, uv_texture_faces)
+        for i, face in enumerate(mesh.tessfaces):
+            store.add_face(face, uv_texture_faces.data[i] if uv_texture_faces else None)
+        store.calc_min_max()
 
         index = len(self.meshes)
         self.meshes.append(store)
@@ -117,22 +114,25 @@ class GLTFBuilder:
         meshes: List[gltf.GLTFMesh] = []
         for mesh in self.meshes:
             # attributes
-            position_accessor_index = self.push_bytes(
-                buffer_index, memoryview(mesh.positions), mesh.position_min, mesh.position_max)
-            normal_accessor_index = self.push_bytes(
-                buffer_index, memoryview(mesh.normals), mesh.normal_min, mesh.normal_max)
+            attributes = {
+                'POSITION': self.push_bytes(
+                    buffer_index, memoryview(mesh.positions), mesh.position_min, mesh.position_max),
+                'NORMAL': self.push_bytes(
+                    buffer_index, memoryview(mesh.normals), mesh.normal_min, mesh.normal_max)
+            }
+            if mesh.uvs:
+                attributes['TEXCOORD_0'] = self.push_bytes(
+                    buffer_index, memoryview(mesh.uvs), mesh.uvs_min, mesh.uvs_max)
+
             # index
-            indices_accessor_index = self.push_bytes(
-                buffer_index, memoryview(mesh.indices), None, None)
+            indices_accessor_index = self.push_bytes(buffer_index, memoryview(mesh.indices), None, None)
+
             #print(position_accessor_index, indices_accessor_index)
             gltf_mesh = gltf.GLTFMesh(
                 name=mesh.name,
                 primitives=[
                     gltf.GLTFMeshPrimitive(
-                        attributes={
-                            'POSITION': position_accessor_index,
-                            'NORMAL': normal_accessor_index
-                        },
+                        attributes=attributes,
                         indices=indices_accessor_index,
                         material=None,
                         mode=gltf.GLTFMeshPrimitiveTopology.TRIANGLES,
