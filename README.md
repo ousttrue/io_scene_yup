@@ -2,13 +2,16 @@
 Scene importer and exporter for Blender
 
 
+# Test by blender python module
+
+* https://en.blender.org/index.php/User:Ideasman42/BlenderAsPyModule
+
 ```py
 import sys
 import bpy
 import addon_io_scene_yup
 
 
-# clear scene
 print('clear scene')
 objs = [o for o in bpy.data.scenes[0].objects]
 for o in objs:
@@ -16,8 +19,6 @@ for o in objs:
 
 
 print('setup scene')
-
-
 if len(sys.argv)>1:
     bpy.ops.wm.open_mainfile(filepath=sys.argv[1])
 else:
