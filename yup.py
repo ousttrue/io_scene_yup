@@ -9,24 +9,158 @@ from .binarybuffer import BinaryBuffer
 from .meshstore import MeshStore
 
 
-def to_gltfMaterial(m: bpy.types.Material)->gltf.GLTFMaterial:
-    return gltf.GLTFMaterial(
-        name=m.name,
-        pbrMetallicRoughness=gltf.GLTFMaterialPBRMetallicRoughness(
-            baseColorFactor=(1.0, 1.0, 1.0, 1.0),
-            baseColorTexture=None,
-            metallicFactor=0,
-            roughnessFactor=0.9,
-            metallicRoughnessTexture=None
-        ),
-        normalTexture=None,
-        occlusionTexture=None,
-        emissiveTexture=None,
-        emissiveFactor=(0, 0, 0),
-        alphaMode=gltf.AlphaMode.OPAQUE,
-        alphaCutoff=None,
-        doubleSided=False
-    )
+def image_to_png(image: bpy.types.Image)->bytes:
+    '''
+    https://blender.stackexchange.com/questions/62072/does-blender-have-a-method-to-a-get-png-formatted-bytearray-for-an-image-via-pyt
+    '''
+    import struct
+    import zlib
+
+    width = image.size[0]
+    height = image.size[1]
+    buf = bytearray([int(p * 255) for p in image.pixels])
+
+    # reverse the vertical line order and add null bytes at the start
+    width_byte_4 = width * 4
+    raw_data = b''.join(b'\x00' + buf[span:span + width_byte_4]
+                        for span in range((height - 1) * width_byte_4, -1, - width_byte_4))
+
+    def png_pack(png_tag, data):
+        chunk_head = png_tag + data
+        return (struct.pack("!I", len(data)) +
+                chunk_head +
+                struct.pack("!I", 0xFFFFFFFF & zlib.crc32(chunk_head)))
+
+    png_bytes = b''.join([
+        b'\x89PNG\r\n\x1a\n',
+        png_pack(b'IHDR', struct.pack("!2I5B", width, height, 8, 6, 0, 0, 0)),
+        png_pack(b'IDAT', zlib.compress(raw_data, 9)),
+        png_pack(b'IEND', b'')])
+    return png_bytes
+
+
+class BufferManager:
+    def __init__(self):
+        self.views: List[gltf.GLTFBufferView] = []
+        self.accessors: List[gltf.GLTFAccessor] = []
+        self.buffer = BinaryBuffer(0)
+
+    def add_view(self, data: bytes)->int:
+        view_index = len(self.views)
+        view = self.buffer.add_values(data)
+        self.views.append(view)
+        return view_index
+
+    def push_bytes(self, values: memoryview,
+                   min: Optional[List[float]], max: Optional[List[float]])->int:
+        componentType, element_count = gltf.format_to_componentType(
+            values.format)
+        # append view
+        view_index = self.add_view(values.tobytes())
+
+        # append accessor
+        accessor_index = len(self.accessors)
+        accessor = gltf.GLTFAccessor(
+            bufferView=view_index,
+            byteOffset=0,
+            componentType=componentType,
+            type=gltf.accessortype_from_elementCount(element_count),
+            count=len(values),
+            min=min,
+            max=max
+        )
+        self.accessors.append(accessor)
+        return accessor_index
+
+
+class MaterialStore:
+    def __init__(self):
+        self.images: List[gltf.GLTFImage] = []
+        self.samplers: List[gltf.GLTFSampler] = []
+        self.textures: List[gltf.GLTFTexture] = []
+        self.texture_map: Dict[bpy.tyeps.Image, int] = {}
+        self.materials: List[gltf.GLTFMaterial] = []
+        self.material_map: Dict[bpy.types.Material, int] = {}
+
+    def get_texture_index(self, texture: bpy.types.Image, buffer: BufferManager)->int:
+        if texture in self.texture_map:
+            return self.texture_map[texture]
+
+        gltf_texture_index = len(self.textures)
+        self.texture_map[texture] = gltf_texture_index
+        self.add_texture(texture, buffer)
+        return gltf_texture_index
+
+    def add_texture(self, src: bpy.types.Image, buffer: BufferManager):
+        image_index = len(self.images)
+
+        print(f'add_texture: {src.name}')
+        png = image_to_png(src)
+        view_index = buffer.add_view(png)
+
+        self.images.append(gltf.GLTFImage(
+            name = src.name,
+            uri = None,
+            mimeType = gltf.MimeType.Png,
+            bufferView = view_index
+        ))
+
+        sampler_index = len(self.samplers)
+        self.samplers.append(gltf.GLTFSampler(
+            magFilter = gltf.MagFilterType.NEAREST,
+            minFilter = gltf.MinFilterType.NEAREST,
+            wrapS = gltf.WrapMode.REPEAT,
+            wrapT = gltf.WrapMode.REPEAT
+        ))
+
+        dst = gltf.GLTFTexture(
+            name=src.name,
+            source=image_index,
+            sampler=sampler_index
+        )
+        self.textures.append(dst)
+
+    def get_material_index(self, material: bpy.types.Material, bufferManager: BufferManager)->int:
+        if material in self.material_map:
+            return self.material_map[material]
+
+        gltf_material_index = len(self.materials)
+        self.material_map[material] = gltf_material_index
+        self.add_material(material, bufferManager)
+        return gltf_material_index
+
+    def add_material(self, src: bpy.types.Material, bufferManager: BufferManager):
+        # texture
+        texture_index = None
+        for i, slot in enumerate(src.texture_slots):
+            if src.use_textures[i] and slot and slot.texture:
+                texture = slot.texture
+                if texture.type == "IMAGE":
+                    image = texture.image
+                    if image:
+                        texture_index = self.get_texture_index(image, bufferManager)
+
+        dst = gltf.GLTFMaterial(
+            name=src.name,
+            pbrMetallicRoughness=gltf.GLTFMaterialPBRMetallicRoughness(
+                baseColorFactor=(1.0, 1.0, 1.0, 1.0),
+                baseColorTexture=gltf.TextureInfo(
+                    index=texture_index,
+                    texCoord=None
+                ),
+                metallicFactor=0,
+                roughnessFactor=0.9,
+                metallicRoughnessTexture=None
+            ),
+            normalTexture=None,
+            occlusionTexture=None,
+            emissiveTexture=None,
+            emissiveFactor=(0, 0, 0),
+            alphaMode=gltf.AlphaMode.OPAQUE,
+            alphaCutoff=None,
+            doubleSided=False
+        )
+        self.materials.append(dst)
 
 
 class GLTFBuilderNode:
@@ -42,9 +176,6 @@ class GLTFBuilder:
         self.gltf = gltf.GLTF()
         self.indent = ' ' * 2
         self.meshes: List[MeshStore] = []
-        self.buffers: List[BinaryBuffer] = []
-        self.views: List[gltf.GLTFBufferView] = []
-        self.accessors: List[gltf.GLTFAccessor] = []
         self.nodes: List[GLTFBuilderNode] = []
         self.root_nodes: List[GLTFBuilderNode] = []
 
@@ -104,43 +235,14 @@ class GLTFBuilder:
         self.meshes.append(store)
         return index
 
-    def add_buffer(self, path: pathlib.Path)->int:
-        index = len(self.buffers)
-        self.buffers.append(BinaryBuffer(index))
-        return index
-
-    def push_bytes(self, buffer_index: int, values: memoryview,
-                   min: Optional[List[float]], max: Optional[List[float]])->int:
-        componentType, element_count = gltf.format_to_componentType(
-            values.format)
-        # append view
-        view_index = len(self.views)
-        view = self.buffers[buffer_index].add_values(values.tobytes())
-        self.views.append(view)
-
-        # append accessor
-        accessor_index = len(self.accessors)
-        accessor = gltf.GLTFAccessor(
-            bufferView=view_index,
-            byteOffset=0,
-            componentType=componentType,
-            type=gltf.GLTFAccessorType(element_count),
-            count=len(values),
-            min=min,
-            max=max
-        )
-        self.accessors.append(accessor)
-        return accessor_index
-
     def write_to(self, gltf_path: pathlib.Path):
         # create buffer
-        bin_path = gltf_path.parent / (gltf_path.stem + ".bin")
-        buffer_index = self.add_buffer(bin_path)
+        buffer = BufferManager()
+
+        # material
+        material_store = MaterialStore()
 
         # meshes
-        materials: List[gltf.GLTFMaterial] = []
-        material_map: Dict[bpy.types.Material, int] = {}
-
         meshes: List[gltf.GLTFMesh] = []
         for mesh in self.meshes:
 
@@ -150,29 +252,20 @@ class GLTFBuilder:
                 if is_first:
                     # attributes
                     attributes = {
-                        'POSITION': self.push_bytes(
-                            buffer_index, memoryview(mesh.positions), mesh.position_min, mesh.position_max),
-                        'NORMAL': self.push_bytes(
-                            buffer_index, memoryview(mesh.normals), mesh.normal_min, mesh.normal_max)
+                        'POSITION': buffer.push_bytes(memoryview(mesh.positions), mesh.position_min, mesh.position_max),
+                        'NORMAL': buffer.push_bytes(memoryview(mesh.normals), mesh.normal_min, mesh.normal_max)
                     }
                     is_first = False
                     if mesh.uvs:
-                        attributes['TEXCOORD_0'] = self.push_bytes(
-                            buffer_index, memoryview(mesh.uvs), mesh.uvs_min, mesh.uvs_max)
+                        attributes['TEXCOORD_0'] = buffer.push_bytes(
+                            memoryview(mesh.uvs), mesh.uvs_min, mesh.uvs_max)
 
                 # submesh indices
-                indices_accessor_index = self.push_bytes(
-                    buffer_index, memoryview(submesh.indices), None, None)
+                indices_accessor_index = buffer.push_bytes(
+                    memoryview(submesh.indices), None, None)
 
                 material = mesh.materials[material_index]
-
-                gltf_material_index = None
-                if material in material_map:
-                    gltf_material_index = material_map[material]
-                else:
-                    gltf_material_index = len(materials)
-                    material_map[material] = gltf_material_index
-                    materials.append(to_gltfMaterial(material))
+                gltf_material_index = material_store.get_material_index(material, buffer)
 
                 primitives.append(gltf.GLTFMeshPrimitive(
                     attributes=attributes,
@@ -201,12 +294,16 @@ class GLTFBuilder:
             nodes=[node.index for node in self.root_nodes]
         )
 
+        bin_path = gltf_path.parent / (gltf_path.stem + ".bin")
         uri = bin_path.relative_to(gltf_path.parent)
         gltf_root = gltf.GLTF(
-            materials=materials,
-            buffers=[gltf.GLTFBUffer(str(uri), len(self.buffers[0].data))],
-            bufferViews=self.views,
-            accessors=self.accessors,
+            buffers=[gltf.GLTFBUffer(str(uri), len(buffer.buffer.data))],
+            bufferViews=buffer.views,
+            images=material_store.images,
+            samplers=material_store.samplers,
+            textures=material_store.textures,
+            materials=material_store.materials,
+            accessors=buffer.accessors,
             meshes=meshes,
             nodes=[to_gltf_node(node) for node in self.nodes],
             scenes=[scene]
@@ -214,7 +311,7 @@ class GLTFBuilder:
 
         # write bin
         with bin_path.open('wb') as f:
-            f.write(self.buffers[buffer_index].data)
+            f.write(buffer.buffer.data)
 
         # write gltf
         with gltf_path.open('wb') as f:

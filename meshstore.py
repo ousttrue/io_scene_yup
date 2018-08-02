@@ -136,26 +136,26 @@ class MeshStore:
     def add_face(self, face: bpy.types.MeshTessFace, uv_texture_face: bpy.types.MeshTextureFace):
         if len(face.vertices) == 3:
             self.uvs[face.vertices[0]] = Vector2(
-                uv_texture_face.uv1.x, uv_texture_face.uv1.y)
+                uv_texture_face.uv1.x, -uv_texture_face.uv1.y)
             self.uvs[face.vertices[1]] = Vector2(
-                uv_texture_face.uv2.x, uv_texture_face.uv2.y)
+                uv_texture_face.uv2.x, -uv_texture_face.uv2.y)
             self.uvs[face.vertices[2]] = Vector2(
-                uv_texture_face.uv3.x, uv_texture_face.uv3.y)
+                uv_texture_face.uv3.x, -uv_texture_face.uv3.y)
 
         elif len(face.vertices) == 4:
             self.uvs[face.vertices[0]] = Vector2(
-                uv_texture_face.uv1.x, uv_texture_face.uv1.y)
+                uv_texture_face.uv1.x, -uv_texture_face.uv1.y)
             self.uvs[face.vertices[1]] = Vector2(
-                uv_texture_face.uv2.x, uv_texture_face.uv2.y)
+                uv_texture_face.uv2.x, -uv_texture_face.uv2.y)
             self.uvs[face.vertices[2]] = Vector2(
-                uv_texture_face.uv3.x, uv_texture_face.uv3.y)
+                uv_texture_face.uv3.x, -uv_texture_face.uv3.y)
 
             self.uvs[face.vertices[2]] = Vector2(
-                uv_texture_face.uv3.x, uv_texture_face.uv3.y)
+                uv_texture_face.uv3.x, -uv_texture_face.uv3.y)
             self.uvs[face.vertices[3]] = Vector2(
-                uv_texture_face.uv4.x, uv_texture_face.uv4.y)
+                uv_texture_face.uv4.x, -uv_texture_face.uv4.y)
             self.uvs[face.vertices[0]] = Vector2(
-                uv_texture_face.uv1.x, uv_texture_face.uv1.y)
+                uv_texture_face.uv1.x, -uv_texture_face.uv1.y)
 
         else:
             raise Exception(f'face.vertices: {len(face.vertices)}')

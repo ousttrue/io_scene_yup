@@ -4,20 +4,10 @@ from collections import namedtuple
 import json
 
 
-class ValueEnum(Enum):
-    pass
-
-
-class NameEnum(Enum):
-    pass
-
-
 class GLTFEncoder(json.JSONEncoder):
     def default(self, o):
-        if isinstance(o, ValueEnum):
+        if isinstance(o, Enum):
             return o.value
-        elif isinstance(o, NameEnum):
-            return o.name
         else:
             return json.JSONEncoder.default(self, o)
 
@@ -50,6 +40,51 @@ class GLTFAsset(NamedTuple):
     version: str = '2.0'
 
 
+class MimeType(Enum):
+    Jpeg = "image/jpeg"
+    Png = "image/png"
+
+
+class GLTFImage(NamedTuple):
+    name: str
+    uri: str
+    mimeType: MimeType
+    bufferView: int
+
+
+class MagFilterType(Enum):
+    NEAREST = 9728
+    LINEAR = 9729
+
+
+class MinFilterType(Enum):
+    NEAREST = 9728
+    LINEAR = 9729
+    NEAREST_MIPMAP_NEAREST = 9984
+    LINEAR_MIPMAP_NEAREST = 9985
+    NEAREST_MIPMAP_LINEAR = 9986
+    LINEAR_MIPMAP_LINEAR = 9987
+
+
+class WrapMode(Enum):
+    REPEAT = 10497
+    CLAMP_TO_EDGE = 33071
+    MIRRORED_REPEAT = 33648
+
+
+class GLTFSampler(NamedTuple):
+    magFilter: MagFilterType
+    minFilter: MinFilterType
+    wrapS: WrapMode
+    wrapT: WrapMode
+
+
+class GLTFTexture(NamedTuple):
+    name: str
+    sampler: int
+    source: int
+
+
 class GLTFMaterialPBRMetallicRoughness(NamedTuple):
     baseColorFactor: Tuple[float, float, float, float]
     baseColorTexture: Any
@@ -75,10 +110,10 @@ class GLTFMaterialOcclusionTextureInfo(NamedTuple):
     strength: float
 
 
-class AlphaMode(NameEnum):
-    OPAQUE = auto()
-    MASK = auto()
-    BLEND = auto()
+class AlphaMode(Enum):
+    OPAQUE = "OPAQUE"
+    MASK = "MASK"
+    BLEND = "BLEND"
 
 
 class GLTFMaterial(NamedTuple):
@@ -106,7 +141,7 @@ class GLTFBufferView(NamedTuple):
     # target:
 
 
-class GLTFAccessorComponentType(ValueEnum):
+class GLTFAccessorComponentType(Enum):
     BYTE = 5120
     UNSIGNED_BYTE = 5121
     SHORT = 5122
@@ -128,18 +163,35 @@ def format_to_componentType(t: str)->Tuple[GLTFAccessorComponentType, int]:
         raise NotImplementedError()
 
 
-class GLTFAccessorType(NameEnum):
-    SCALAR = 1
-    VEC2 = 2
-    VEC3 = 3
-    VEC4 = 4
-    #MAT2 = auto()
-    MAT3 = 9
-    MAT4 = 16
+class GLTFAccessorType(Enum):
+    SCALAR = "SCALAR"
+    VEC2 = "VEC2"
+    VEC3 = "VEC3"
+    VEC4 = "VEC4"
+    MAT2 = "MAT2"
+    MAT3 = "MAT3"
+    MAT4 = "MAT4"
+
+
+def accessortype_from_elementCount(count: int)->GLTFAccessorType:
+    if count == 1:
+        return GLTFAccessorType.SCALAR
+    elif count == 2:
+        return GLTFAccessorType.VEC2
+    elif count == 3:
+        return GLTFAccessorType.VEC3
+    elif count == 4:
+        return GLTFAccessorType.VEC4
+    elif count == 9:
+        return GLTFAccessorType.MAT3
+    elif count == 16:
+        return GLTFAccessorType.MAT4
+    else:
+        raise NotImplementedError()
 
 
 class GLTFAccessor(NamedTuple):
-    bufferView: Optional[int]
+    bufferView: int
     byteOffset: int
     componentType: GLTFAccessorComponentType
     type: GLTFAccessorType
@@ -148,7 +200,7 @@ class GLTFAccessor(NamedTuple):
     max: List[float]
 
 
-class GLTFMeshPrimitiveTopology(ValueEnum):
+class GLTFMeshPrimitiveTopology(Enum):
     POINTS = 0
     LINES = 1
     LINE_LOOP = 2
@@ -186,9 +238,12 @@ class GLTFScene(NamedTuple):
 class GLTF(NamedTuple):
     extensionsUsed: List[str] = []
     asset: GLTFAsset = GLTFAsset()
-    materials: List[GLTFMaterial] = []
     buffers: List[GLTFBUffer] = []
     bufferViews: List[GLTFBufferView] = []
+    images: List[GLTFImage] = []
+    samplers: List[GLTFSampler] = []
+    textures: List[GLTFTexture] = []
+    materials: List[GLTFMaterial] = []
     accessors: List[GLTFAccessor] = []
     meshes: List[GLTFMesh] = []
     nodes: List[GLTFNode] = []
