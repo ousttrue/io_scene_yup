@@ -1,7 +1,7 @@
 import array
 import mathutils
 import ctypes
-from typing import Any, List, Iterable
+from typing import Any, List, Iterable, Dict
 import bpy
 
 
@@ -77,11 +77,37 @@ def getFaceUV(mesh, i, faces, count=3):
         return ((0, 0), (0, 0), (0, 0), (0, 0))
 
 
+class Submesh:
+    def __init__(self):
+        self.indices: Any = array.array('I')
+
+    def add_face(self, face: bpy.types.MeshTessFace):
+        if len(face.vertices) == 3:
+            # triangle
+            self.indices.append(face.vertices[0])
+            self.indices.append(face.vertices[1])
+            self.indices.append(face.vertices[2])
+
+        elif len(face.vertices) == 4:
+            # quad
+            self.indices.append(face.vertices[0])
+            self.indices.append(face.vertices[1])
+            self.indices.append(face.vertices[2])
+
+            self.indices.append(face.vertices[2])
+            self.indices.append(face.vertices[3])
+            self.indices.append(face.vertices[0])
+
+        else:
+            raise Exception(f'face.vertices: {len(face.vertices)}')
+
 class MeshStore:
 
     def __init__(self, name: str,
                  vertices: List[bpy.types.MeshVertex],
-                 uv_texture_faces: bpy.types.MeshTextureFaceLayer)->None:
+                 uv_texture_faces: bpy.types.MeshTextureFaceLayer,
+                 materials: List[bpy.types.Material]
+                 )->None:
         self.name = name
         self.positions: Any = (Vector3 * len(vertices))()
         self.normals: Any = (Vector3 * len(vertices))()
@@ -92,7 +118,9 @@ class MeshStore:
         if uv_texture_faces:
             self.uvs: Any = (Vector2 * len(vertices))()
 
-        self.indices: Any = array.array('I')
+        self.submesh_map: Dict[int, Submesh] = {} 
+
+        self.materials: List[bpy.types.Material] = materials
 
     def calc_min_max(self):
         self.position_min, self.position_max = get_min_max3(self.positions)
@@ -100,33 +128,35 @@ class MeshStore:
         if self.uvs:
             self.uvs_min, self.uvs_max = get_min_max2(self.uvs)
 
+    def get_or_create_submesh(self, material_index: int)->Submesh:
+        if material_index not in self.submesh_map:
+            self.submesh_map[material_index]=Submesh()
+        return self.submesh_map[material_index]
+
     def add_face(self, face: bpy.types.MeshTessFace, uv_texture_face: bpy.types.MeshTextureFace):
         if len(face.vertices) == 3:
-            # triangle
-            self.indices.append(face.vertices[0])
-            self.indices.append(face.vertices[1])
-            self.indices.append(face.vertices[2])
-            if uv_texture_face:
-                self.uvs[face.vertices[0]] = Vector2(
-                    uv_texture_face.uv1.x, uv_texture_face.uv1.y)
-                self.uvs[face.vertices[1]] = Vector2(
-                    uv_texture_face.uv2.x, uv_texture_face.uv2.y)
-                self.uvs[face.vertices[2]] = Vector2(
-                    uv_texture_face.uv3.x, uv_texture_face.uv3.y)
+            self.uvs[face.vertices[0]] = Vector2(
+                uv_texture_face.uv1.x, uv_texture_face.uv1.y)
+            self.uvs[face.vertices[1]] = Vector2(
+                uv_texture_face.uv2.x, uv_texture_face.uv2.y)
+            self.uvs[face.vertices[2]] = Vector2(
+                uv_texture_face.uv3.x, uv_texture_face.uv3.y)
 
         elif len(face.vertices) == 4:
-            # quad
-            self.indices.append(face.vertices[0])
-            self.indices.append(face.vertices[1])
-            self.indices.append(face.vertices[2])
-            if uv_texture_face:
-                pass
+            self.uvs[face.vertices[0]] = Vector2(
+                uv_texture_face.uv1.x, uv_texture_face.uv1.y)
+            self.uvs[face.vertices[1]] = Vector2(
+                uv_texture_face.uv2.x, uv_texture_face.uv2.y)
+            self.uvs[face.vertices[2]] = Vector2(
+                uv_texture_face.uv3.x, uv_texture_face.uv3.y)
 
-            self.indices.append(face.vertices[2])
-            self.indices.append(face.vertices[3])
-            self.indices.append(face.vertices[0])
-            if uv_texture_face:
-                pass
+            self.uvs[face.vertices[2]] = Vector2(
+                uv_texture_face.uv3.x, uv_texture_face.uv3.y)
+            self.uvs[face.vertices[3]] = Vector2(
+                uv_texture_face.uv4.x, uv_texture_face.uv4.y)
+            self.uvs[face.vertices[0]] = Vector2(
+                uv_texture_face.uv1.x, uv_texture_face.uv1.y)
 
         else:
             raise Exception(f'face.vertices: {len(face.vertices)}')
+

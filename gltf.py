@@ -50,6 +50,10 @@ class GLTFAsset(NamedTuple):
     version: str = '2.0'
 
 
+class GLTFMaterial(NamedTuple):
+    name: str
+
+
 class GLTFBUffer(NamedTuple):
     uri: str
     byteLength: int
@@ -143,6 +147,7 @@ class GLTFScene(NamedTuple):
 class GLTF(NamedTuple):
     extensionsUsed: List[str] = []
     asset: GLTFAsset = GLTFAsset()
+    materials: List[GLTFMaterial] = []
     buffers: List[GLTFBUffer] = []
     bufferViews: List[GLTFBufferView] = []
     accessors: List[GLTFAccessor] = []
