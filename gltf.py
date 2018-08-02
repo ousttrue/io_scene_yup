@@ -1,4 +1,4 @@
-from typing import NamedTuple, List, Dict, Tuple, Optional
+from typing import NamedTuple, List, Dict, Tuple, Optional, Any
 from enum import Enum, auto
 from collections import namedtuple
 import json
@@ -50,8 +50,47 @@ class GLTFAsset(NamedTuple):
     version: str = '2.0'
 
 
+class GLTFMaterialPBRMetallicRoughness(NamedTuple):
+    baseColorFactor: Tuple[float, float, float, float]
+    baseColorTexture: Any
+    metallicFactor: float
+    roughnessFactor: float
+    metallicRoughnessTexture: Any
+
+
+class TextureInfo(NamedTuple):
+    index: int  # type: ignore
+    texCoord: int
+
+
+class GLTFMaterialNormalTextureInfo(NamedTuple):
+    index: int  # type: ignore
+    texCoord: int
+    scale: float
+
+
+class GLTFMaterialOcclusionTextureInfo(NamedTuple):
+    index: int  # type: ignore
+    texCoord: int
+    strength: float
+
+
+class AlphaMode(NameEnum):
+    OPAQUE = auto()
+    MASK = auto()
+    BLEND = auto()
+
+
 class GLTFMaterial(NamedTuple):
     name: str
+    pbrMetallicRoughness: GLTFMaterialPBRMetallicRoughness
+    normalTexture: GLTFMaterialNormalTextureInfo
+    occlusionTexture: GLTFMaterialOcclusionTextureInfo
+    emissiveTexture: TextureInfo
+    emissiveFactor: Tuple[float, float, float]
+    alphaMode: AlphaMode
+    alphaCutoff: float
+    doubleSided: bool
 
 
 class GLTFBUffer(NamedTuple):

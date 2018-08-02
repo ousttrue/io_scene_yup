@@ -3,10 +3,30 @@ import mathutils
 import array
 import io
 import pathlib
-from typing import List, NamedTuple, Optional
+from typing import List, NamedTuple, Optional, Dict
 from . import gltf
 from .binarybuffer import BinaryBuffer
 from .meshstore import MeshStore
+
+
+def to_gltfMaterial(m: bpy.types.Material)->gltf.GLTFMaterial:
+    return gltf.GLTFMaterial(
+        name=m.name,
+        pbrMetallicRoughness=gltf.GLTFMaterialPBRMetallicRoughness(
+            baseColorFactor=(1.0, 1.0, 1.0, 1.0),
+            baseColorTexture=None,
+            metallicFactor=0,
+            roughnessFactor=0.9,
+            metallicRoughnessTexture=None
+        ),
+        normalTexture=None,
+        occlusionTexture=None,
+        emissiveTexture=None,
+        emissiveFactor=(0, 0, 0),
+        alphaMode=gltf.AlphaMode.OPAQUE,
+        alphaCutoff=None,
+        doubleSided=False
+    )
 
 
 class GLTFBuilderNode:
@@ -70,8 +90,9 @@ class GLTFBuilder:
                     return l
 
         mesh.update(calc_tessface=True)
-        uv_texture_faces=get_texture_layer(mesh.tessface_uv_textures)
-        store = MeshStore(mesh.name, mesh.vertices, uv_texture_faces, mesh.materials)
+        uv_texture_faces = get_texture_layer(mesh.tessface_uv_textures)
+        store = MeshStore(mesh.name, mesh.vertices,
+                          uv_texture_faces, mesh.materials)
         for i, face in enumerate(mesh.tessfaces):
             submesh = store.get_or_create_submesh(face.material_index)
             submesh.add_face(face)
@@ -88,9 +109,10 @@ class GLTFBuilder:
         self.buffers.append(BinaryBuffer(index))
         return index
 
-    def push_bytes(self, buffer_index: int, values: memoryview, 
-            min: Optional[List[float]], max: Optional[List[float]])->int:
-        componentType, element_count = gltf.format_to_componentType(values.format)
+    def push_bytes(self, buffer_index: int, values: memoryview,
+                   min: Optional[List[float]], max: Optional[List[float]])->int:
+        componentType, element_count = gltf.format_to_componentType(
+            values.format)
         # append view
         view_index = len(self.views)
         view = self.buffers[buffer_index].add_values(values.tobytes())
@@ -122,7 +144,7 @@ class GLTFBuilder:
         meshes: List[gltf.GLTFMesh] = []
         for mesh in self.meshes:
 
-            is_first=True
+            is_first = True
             primitives: List[gltf.GLTFMeshPrimitive] = []
             for material_index, submesh in mesh.submesh_map.items():
                 if is_first:
@@ -133,31 +155,32 @@ class GLTFBuilder:
                         'NORMAL': self.push_bytes(
                             buffer_index, memoryview(mesh.normals), mesh.normal_min, mesh.normal_max)
                     }
-                    is_first=False
+                    is_first = False
                     if mesh.uvs:
                         attributes['TEXCOORD_0'] = self.push_bytes(
                             buffer_index, memoryview(mesh.uvs), mesh.uvs_min, mesh.uvs_max)
 
                 # submesh indices
-                indices_accessor_index = self.push_bytes(buffer_index, memoryview(submesh.indices), None, None)
+                indices_accessor_index = self.push_bytes(
+                    buffer_index, memoryview(submesh.indices), None, None)
 
                 material = mesh.materials[material_index]
 
-                gltf_material_index=None
+                gltf_material_index = None
                 if material in material_map:
                     gltf_material_index = material_map[material]
                 else:
                     gltf_material_index = len(materials)
                     material_map[material] = gltf_material_index
-                    materials.append(gltf.GLTFMaterial("material"))
+                    materials.append(to_gltfMaterial(material))
 
                 primitives.append(gltf.GLTFMeshPrimitive(
-                        attributes=attributes,
-                        indices=indices_accessor_index,
-                        material=material_index,
-                        mode=gltf.GLTFMeshPrimitiveTopology.TRIANGLES,
-                        targets=[]
-                    ))
+                    attributes=attributes,
+                    indices=indices_accessor_index,
+                    material=material_index,
+                    mode=gltf.GLTFMeshPrimitiveTopology.TRIANGLES,
+                    targets=[]
+                ))
 
             #print(position_accessor_index, indices_accessor_index)
             gltf_mesh = gltf.GLTFMesh(
@@ -175,7 +198,7 @@ class GLTFBuilder:
 
         scene = gltf.GLTFScene(
             name='scene',
-            nodes = [node.index for node in self.root_nodes]
+            nodes=[node.index for node in self.root_nodes]
         )
 
         uri = bin_path.relative_to(gltf_path.parent)
@@ -208,7 +231,7 @@ def get_objects(selected_only: bool):
 def export(path: pathlib.Path, selected_only: bool):
 
     # object mode
-    if bpy.context.mode!='OBJECT':
+    if bpy.context.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
 
     objects = get_objects(selected_only)
