@@ -65,7 +65,7 @@ class GLTFBuilder:
     def export_mesh(self, mesh: bpy.types.Mesh)->int:
 
         mesh.update(calc_tessface=True)
-        store = MeshStore(mesh.name, [v.co for v in mesh.vertices])
+        store = MeshStore(mesh.name, mesh.vertices)
         i = 0
         for face in mesh.tessfaces:
 
@@ -116,8 +116,12 @@ class GLTFBuilder:
 
         meshes: List[gltf.GLTFMesh] = []
         for mesh in self.meshes:
+            # attributes
             position_accessor_index = self.push_bytes(
-                buffer_index, memoryview(mesh.positions), mesh.min, mesh.max)
+                buffer_index, memoryview(mesh.positions), mesh.position_min, mesh.position_max)
+            normal_accessor_index = self.push_bytes(
+                buffer_index, memoryview(mesh.normals), mesh.normal_min, mesh.normal_max)
+            # index
             indices_accessor_index = self.push_bytes(
                 buffer_index, memoryview(mesh.indices), None, None)
             #print(position_accessor_index, indices_accessor_index)
@@ -126,7 +130,8 @@ class GLTFBuilder:
                 primitives=[
                     gltf.GLTFMeshPrimitive(
                         attributes={
-                            'POSITION': position_accessor_index
+                            'POSITION': position_accessor_index,
+                            'NORMAL': normal_accessor_index
                         },
                         indices=indices_accessor_index,
                         material=None,

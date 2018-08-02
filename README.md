@@ -9,19 +9,16 @@ Scene importer and exporter for Blender
 ```py
 import sys
 import bpy
-import addon_io_scene_yup
-
-
-print('clear scene')
-objs = [o for o in bpy.data.scenes[0].objects]
-for o in objs:
-    bpy.data.objects.remove(o, True)
 
 
 print('setup scene')
 if len(sys.argv)>1:
     bpy.ops.wm.open_mainfile(filepath=sys.argv[1])
 else:
+    objs = [o for o in bpy.data.scenes[0].objects]
+    for o in objs:
+        bpy.data.objects.remove(o, True)
+
     def create_mesh(mesh):
         # Construct the bmesh cube and assign it to the blender mesh.
         import bmesh
@@ -39,6 +36,7 @@ else:
 
 
 print('call plugin')
+import addon_io_scene_yup
 addon_io_scene_yup.register()
 bpy.ops.export_scene.yup('EXEC_DEFAULT', filepath='tmp.gltf', selectedonly=False)
 ```

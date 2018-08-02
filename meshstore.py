@@ -1,7 +1,8 @@
 import array
 import mathutils
 import ctypes
-from typing import Any, List
+from typing import Any, List, Iterable
+import bpy
 
 
 class Vector3(ctypes.LittleEndianStructure):
@@ -12,25 +13,43 @@ class Vector3(ctypes.LittleEndianStructure):
     ]
 
 
+def Vector3_from_meshVertex(v: mathutils.Vector)->Vector3:
+    return Vector3(v.x, v.z, -v.y)
+
+
+def get_min_max(list: List[Vector3]):
+    min: List[float] = [float('inf')] * 3
+    max: List[float] = [float('-inf')] * 3
+    for v in list:
+        if v.x < min[0]:
+            min[0] = v.x
+        if v.x > max[0]:
+            max[0] = v.x
+        if v.y < min[1]:
+            min[1] = v.y
+        if v.y > max[1]:
+            max[1] = v.y
+        if v.z < min[2]:
+            min[2] = v.z
+        if v.z > max[2]:
+            max[2] = v.z
+    return min, max
+
+
 class MeshStore:
 
-    def __init__(self, name: str, vertices: List[mathutils.Vector])->None:
+    def __init__(self, name: str, vertices: List[bpy.types.MeshVertex])->None:
         self.name = name
         self.positions: Any = (Vector3 * len(vertices))()
-        for i, pos in enumerate(vertices):
-            #self.positions[i] = Vector3(pos.x, pos.y, pos.z)
-            self.positions[i] = Vector3(pos.x, pos.z, -pos.y)
-        self.indices: array.array = array.array('I')
+        self.normals: Any = (Vector3 * len(vertices))()
+        for i, v in enumerate(vertices):
+            self.positions[i] = Vector3_from_meshVertex(v.co)
+            self.normals[i] = Vector3_from_meshVertex(v.normal)
+        self.indices: Any = array.array('I')
         # min max
-        self.min: List[float] = [float('inf')] * 3 
-        self.max: List[float] = [float('-inf')] * 3
-        for v in self.positions:
-            if v.x < self.min[0]: self.min[0] = v.x
-            if v.x > self.max[0]: self.max[0] = v.x
-            if v.y < self.min[1]: self.min[1] = v.y
-            if v.y > self.max[1]: self.max[1] = v.y
-            if v.z < self.min[2]: self.min[2] = v.z
-            if v.z > self.max[2]: self.max[2] = v.z
+        self.position_min, self.position_max = get_min_max(self.positions)
+        self.normal_min, self.normal_max = get_min_max(self.normals)
+
 
     def add_triangle(self, i0: int, i1: int, i2: int):
         self.indices.append(i0)
