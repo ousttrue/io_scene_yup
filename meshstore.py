@@ -24,7 +24,7 @@ class MeshStore:
         # min max
         self.min: List[float] = [float('inf')] * 3 
         self.max: List[float] = [float('-inf')] * 3
-        for v in vertices:
+        for v in self.positions:
             if v.x < self.min[0]: self.min[0] = v.x
             if v.x > self.max[0]: self.max[0] = v.x
             if v.y < self.min[1]: self.min[1] = v.y
