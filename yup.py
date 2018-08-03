@@ -99,18 +99,18 @@ class MaterialStore:
         view_index = buffer.add_view(png)
 
         self.images.append(gltf.GLTFImage(
-            name = src.name,
-            uri = None,
-            mimeType = gltf.MimeType.Png,
-            bufferView = view_index
+            name=src.name,
+            uri=None,
+            mimeType=gltf.MimeType.Png,
+            bufferView=view_index
         ))
 
         sampler_index = len(self.samplers)
         self.samplers.append(gltf.GLTFSampler(
-            magFilter = gltf.MagFilterType.NEAREST,
-            minFilter = gltf.MinFilterType.NEAREST,
-            wrapS = gltf.WrapMode.REPEAT,
-            wrapT = gltf.WrapMode.REPEAT
+            magFilter=gltf.MagFilterType.NEAREST,
+            minFilter=gltf.MinFilterType.NEAREST,
+            wrapS=gltf.WrapMode.REPEAT,
+            wrapT=gltf.WrapMode.REPEAT
         ))
 
         dst = gltf.GLTFTexture(
@@ -131,28 +131,36 @@ class MaterialStore:
 
     def add_material(self, src: bpy.types.Material, bufferManager: BufferManager):
         # texture
-        texture_index = None
+        color_texture = None
+        normal_texture = None
         for i, slot in enumerate(src.texture_slots):
             if src.use_textures[i] and slot and slot.texture:
-                texture = slot.texture
-                if texture.type == "IMAGE":
-                    image = texture.image
-                    if image:
-                        texture_index = self.get_texture_index(image, bufferManager)
+                if slot.use_map_color_diffuse and slot.texture and slot.texture.image:
+                    color_texture_index = self.get_texture_index(
+                        slot.texture.image, bufferManager)
+                    color_texture = gltf.TextureInfo(
+                        index=color_texture_index,
+                        texCoord=None
+                    )
+                elif slot.use_map_normal and slot.texture and slot.texture.image:
+                    normal_texture_index = self.get_texture_index(
+                        slot.texture.image, bufferManager)
+                    normal_texture=gltf.GLTFMaterialNormalTextureInfo(
+                            index=normal_texture_index,
+                            texCoord=None,
+                            scale=slot.normal_factor,
+                    )
 
         dst = gltf.GLTFMaterial(
             name=src.name,
             pbrMetallicRoughness=gltf.GLTFMaterialPBRMetallicRoughness(
                 baseColorFactor=(1.0, 1.0, 1.0, 1.0),
-                baseColorTexture=gltf.TextureInfo(
-                    index=texture_index,
-                    texCoord=None
-                ),
+                baseColorTexture=color_texture,
                 metallicFactor=0,
                 roughnessFactor=0.9,
                 metallicRoughnessTexture=None
             ),
-            normalTexture=None,
+            normalTexture=normal_texture,
             occlusionTexture=None,
             emissiveTexture=None,
             emissiveFactor=(0, 0, 0),
@@ -265,12 +273,13 @@ class GLTFBuilder:
                     memoryview(submesh.indices), None, None)
 
                 material = mesh.materials[material_index]
-                gltf_material_index = material_store.get_material_index(material, buffer)
+                gltf_material_index = material_store.get_material_index(
+                    material, buffer)
 
                 primitives.append(gltf.GLTFMeshPrimitive(
                     attributes=attributes,
                     indices=indices_accessor_index,
-                    material=material_index,
+                    material=gltf_material_index,
                     mode=gltf.GLTFMeshPrimitiveTopology.TRIANGLES,
                     targets=[]
                 ))
