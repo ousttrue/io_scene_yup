@@ -47,7 +47,7 @@ class MimeType(Enum):
 
 class GLTFImage(NamedTuple):
     name: str
-    uri: str
+    uri: Optional[str]
     mimeType: MimeType
     bufferView: int
 
@@ -119,13 +119,13 @@ class AlphaMode(Enum):
 class GLTFMaterial(NamedTuple):
     name: str
     pbrMetallicRoughness: GLTFMaterialPBRMetallicRoughness
-    normalTexture: GLTFMaterialNormalTextureInfo
-    occlusionTexture: GLTFMaterialOcclusionTextureInfo
-    emissiveTexture: TextureInfo
+    normalTexture: Optional[GLTFMaterialNormalTextureInfo]
+    occlusionTexture: Optional[GLTFMaterialOcclusionTextureInfo]
+    emissiveTexture: Optional[TextureInfo]
     emissiveFactor: Tuple[float, float, float]
     alphaMode: AlphaMode
-    alphaCutoff: float
-    doubleSided: bool
+    alphaCutoff: Optional[float] # for AlphaMode.MASK
+    doubleSided: bool = False
 
 
 class GLTFBUffer(NamedTuple):
@@ -196,8 +196,8 @@ class GLTFAccessor(NamedTuple):
     componentType: GLTFAccessorComponentType
     type: GLTFAccessorType
     count: int  # type: ignore
-    min: List[float]
-    max: List[float]
+    min: Optional[List[float]]
+    max: Optional[List[float]]
 
 
 class GLTFMeshPrimitiveTopology(Enum):

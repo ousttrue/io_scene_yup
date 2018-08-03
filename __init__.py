@@ -16,7 +16,7 @@ bl_info = {
 if "bpy" in locals():
     import importlib
     if "yup" in locals():
-        importlib.reload(yup) # type: ignore
+        importlib.reload(yup)  # type: ignore
 
 import bpy
 from bpy.props import BoolProperty
@@ -42,7 +42,7 @@ class ExportYUP(bpy.types.Operator):
     def execute(self, context):
         self.filepath = bpy.path.ensure_ext(self.filepath, ".gltf")
         import pathlib
-        path=pathlib.Path(self.filepath).absolute()
+        path = pathlib.Path(self.filepath).absolute()
 
         from . import yup
         yup.export(path, self.selectedonly)

@@ -133,6 +133,7 @@ class MaterialStore:
         # texture
         color_texture = None
         normal_texture = None
+        alpha_mode = gltf.AlphaMode.OPAQUE
         for i, slot in enumerate(src.texture_slots):
             if src.use_textures[i] and slot and slot.texture:
                 if slot.use_map_color_diffuse and slot.texture and slot.texture.image:
@@ -140,17 +141,23 @@ class MaterialStore:
                         slot.texture.image, bufferManager)
                     color_texture = gltf.TextureInfo(
                         index=color_texture_index,
-                        texCoord=None
+                        texCoord=0
                     )
+                    if slot.use_map_alpha:
+                        if slot.use_stencil:
+                            alpha_mode = gltf.AlphaMode.MASK
+                        else:
+                            alpha_mode = gltf.AlphaMode.BLEND
                 elif slot.use_map_normal and slot.texture and slot.texture.image:
                     normal_texture_index = self.get_texture_index(
                         slot.texture.image, bufferManager)
-                    normal_texture=gltf.GLTFMaterialNormalTextureInfo(
-                            index=normal_texture_index,
-                            texCoord=None,
-                            scale=slot.normal_factor,
+                    normal_texture = gltf.GLTFMaterialNormalTextureInfo(
+                        index=normal_texture_index,
+                        texCoord=0,
+                        scale=slot.normal_factor,
                     )
 
+        # material
         dst = gltf.GLTFMaterial(
             name=src.name,
             pbrMetallicRoughness=gltf.GLTFMaterialPBRMetallicRoughness(
@@ -164,7 +171,7 @@ class MaterialStore:
             occlusionTexture=None,
             emissiveTexture=None,
             emissiveFactor=(0, 0, 0),
-            alphaMode=gltf.AlphaMode.OPAQUE,
+            alphaMode=alpha_mode,
             alphaCutoff=None,
             doubleSided=False
         )
