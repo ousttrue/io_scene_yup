@@ -12,12 +12,11 @@ from .materialstore import MaterialStore
 
 
 class Node:
-    def __init__(self, index: int, name: str, position: mathutils.Vector)->None:
-        self.index = index
+    def __init__(self, name: str, position: mathutils.Vector)->None:
         self.name = name
         self.position = Vector3_from_meshVertex(position)
         self.children: List[Node] = []
-        self.mesh: Optional[int] = None
+        self.mesh: Optional[MeshStore] = None
         self.skin: Optional[Skin] = None
 
 
@@ -43,7 +42,7 @@ class GLTFBuilder:
             self.root_nodes.append(root_node)
 
     def export_object(self, o: bpy.types.Object, indent: str='')->Node:
-        node = Node(len(self.nodes), o.name, o.matrix_world.to_translation())
+        node = Node(o.name, o.matrix_world.to_translation())
         self.nodes.append(node)
 
         # only mesh
@@ -63,8 +62,7 @@ class GLTFBuilder:
                 pass
 
             # export
-            mesh_index = self.export_mesh(mesh)
-            node.mesh = mesh_index
+            node.mesh = self.export_mesh(mesh)
 
         elif o.type == 'ARMATURE':
             skin = self.export_armature(o)
@@ -78,7 +76,7 @@ class GLTFBuilder:
         return node
 
     def export_bone(self, matrix_world: mathutils.Matrix, bone: bpy.types.Bone)->Node:
-        node = Node(len(self.nodes), bone.name, bone.head_local)
+        node = Node(bone.name, bone.head_local)
         self.nodes.append(node)
 
         for child in bone.children:
@@ -107,7 +105,7 @@ class GLTFBuilder:
 
         return skin
 
-    def export_mesh(self, mesh: bpy.types.Mesh)->int:
+    def export_mesh(self, mesh: bpy.types.Mesh)->MeshStore:
 
         def get_texture_layer(layers):
             for l in layers:
@@ -123,9 +121,8 @@ class GLTFBuilder:
                 for fv in triangle:
                     submesh.indices.append(fv)
 
-        index = len(self.mesh_stores)
         self.mesh_stores.append(store)
-        return index
+        return store
 
     def write_to(self, gltf_path: pathlib.Path):
         # create buffer
@@ -183,15 +180,15 @@ class GLTFBuilder:
         def to_gltf_node(node: Node):
             return gltf.GLTFNode(
                 name=node.name,
-                children=[child.index for child in node.children],
+                children=[self.nodes.index(child) for child in node.children],
                 translation=(node.position.x,
                              node.position.y, node.position.z),
-                mesh=node.mesh
+                mesh=self.mesh_stores.index(node.mesh) if node.mesh else None
             )
 
         scene = gltf.GLTFScene(
             name='scene',
-            nodes=[node.index for node in self.root_nodes]
+            nodes=[self.nodes.index(node) for node in self.root_nodes]
         )
 
         bin_path = gltf_path.parent / (gltf_path.stem + ".bin")
