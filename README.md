@@ -1,6 +1,7 @@
 # YUP
 Scene importer and exporter for Blender
 
+![yup](yup.png)
 
 # Test by blender python module
 
