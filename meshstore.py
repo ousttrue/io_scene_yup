@@ -1,7 +1,7 @@
 import array
 import mathutils
 import ctypes
-from typing import Any, List, Iterable, Dict
+from typing import Any, List, Iterable, Dict, Generator, Tuple, Optional, NamedTuple
 import bpy
 
 
@@ -10,6 +10,10 @@ class Vector2(ctypes.LittleEndianStructure):
         ("x", ctypes.c_float),
         ("y", ctypes.c_float),
     ]
+
+
+def Vector2_from_faceUV(uv: mathutils.Vector)->Vector2:
+    return Vector2(uv.x, -uv.y)
 
 
 class Vector3(ctypes.LittleEndianStructure):
@@ -24,7 +28,7 @@ def Vector3_from_meshVertex(v: mathutils.Vector)->Vector3:
     return Vector3(v.x, v.z, -v.y)
 
 
-def get_min_max2(list: List[Vector2]):
+def get_min_max2(list: Iterable[Vector2]):
     min: List[float] = [float('inf')] * 2
     max: List[float] = [float('-inf')] * 2
     for v in list:
@@ -39,7 +43,7 @@ def get_min_max2(list: List[Vector2]):
     return min, max
 
 
-def get_min_max3(list: List[Vector3]):
+def get_min_max3(list: Iterable[Vector3]):
     min: List[float] = [float('inf')] * 3
     max: List[float] = [float('-inf')] * 3
     for v in list:
@@ -78,34 +82,38 @@ def getFaceUV(mesh, i, faces, count=3):
 
 
 class Submesh:
-    def __init__(self):
+    def __init__(self, material_index: int)->None:
         self.indices: Any = array.array('I')
+        self.material_index = material_index
 
-    def add_face(self, face: bpy.types.MeshTessFace):
-        if len(face.vertices) == 3:
-            # triangle
-            self.indices.append(face.vertices[0])
-            self.indices.append(face.vertices[1])
-            self.indices.append(face.vertices[2])
 
-        elif len(face.vertices) == 4:
-            # quad
-            self.indices.append(face.vertices[0])
-            self.indices.append(face.vertices[1])
-            self.indices.append(face.vertices[2])
+class Values(NamedTuple):
+    values: Any
+    min: List[float]
+    max: List[float]
 
-            self.indices.append(face.vertices[2])
-            self.indices.append(face.vertices[3])
-            self.indices.append(face.vertices[0])
+class Mesh(NamedTuple):
+    name: str
+    positions: Values
+    normals: Values
+    uvs: Values
+    materials: List[bpy.types.Material]
+    submeshes: List[Submesh]
 
-        else:
-            raise Exception(f'face.vertices: {len(face.vertices)}')
+
+class FaceVertex(NamedTuple):
+    position_index: int
+    normal: Optional[Vector3]
+    uv: Vector2
+
+    def __hash__(self):
+        return hash(self.position_index)
+
 
 class MeshStore:
 
     def __init__(self, name: str,
                  vertices: List[bpy.types.MeshVertex],
-                 uv_texture_faces: bpy.types.MeshTextureFaceLayer,
                  materials: List[bpy.types.Material]
                  )->None:
         self.name = name
@@ -115,48 +123,77 @@ class MeshStore:
             self.positions[i] = Vector3_from_meshVertex(v.co)
             self.normals[i] = Vector3_from_meshVertex(v.normal)
 
-        if uv_texture_faces:
-            self.uvs: Any = (Vector2 * len(vertices))()
-
-        self.submesh_map: Dict[int, Submesh] = {} 
+        self.submesh_map: Dict[int, Submesh] = {}
 
         self.materials: List[bpy.types.Material] = materials
 
-    def calc_min_max(self):
-        self.position_min, self.position_max = get_min_max3(self.positions)
-        self.normal_min, self.normal_max = get_min_max3(self.normals)
-        if self.uvs:
-            self.uvs_min, self.uvs_max = get_min_max2(self.uvs)
+        self.faceVertices: List[FaceVertex] = []
+        self.faceVertexMap: Dict[FaceVertex, int] = {}
 
     def get_or_create_submesh(self, material_index: int)->Submesh:
         if material_index not in self.submesh_map:
-            self.submesh_map[material_index]=Submesh()
+            self.submesh_map[material_index] = Submesh(material_index)
         return self.submesh_map[material_index]
 
-    def add_face(self, face: bpy.types.MeshTessFace, uv_texture_face: bpy.types.MeshTextureFace):
+    def get_or_add_face(self, vertex_index: int, uv: mathutils.Vector, normal: Optional[mathutils.Vector])->int:
+        face = FaceVertex(vertex_index,
+                          Vector3_from_meshVertex(normal) if normal else None,
+                          Vector2_from_faceUV(uv))
+        if face not in self.faceVertexMap:
+            index = len(self.faceVertices)
+            self.faceVertexMap[face] = index
+            self.faceVertices.append(face)
+        return self.faceVertexMap[face]
+
+    def add_face(self, face: bpy.types.MeshTessFace, uv_texture_face: bpy.types.MeshTextureFace)->List[Tuple[int, int, int]]:
+
         if len(face.vertices) == 3:
-            self.uvs[face.vertices[0]] = Vector2(
-                uv_texture_face.uv1.x, -uv_texture_face.uv1.y)
-            self.uvs[face.vertices[1]] = Vector2(
-                uv_texture_face.uv2.x, -uv_texture_face.uv2.y)
-            self.uvs[face.vertices[2]] = Vector2(
-                uv_texture_face.uv3.x, -uv_texture_face.uv3.y)
+            i0 = self.get_or_add_face(
+                face.vertices[0], uv_texture_face.uv1, None if face.use_smooth else face.normal)
+            i1 = self.get_or_add_face(
+                face.vertices[1], uv_texture_face.uv2, None if face.use_smooth else face.normal)
+            i2 = self.get_or_add_face(
+                face.vertices[2], uv_texture_face.uv3, None if face.use_smooth else face.normal)
+            return [(i0, i1, i2)]
 
         elif len(face.vertices) == 4:
-            self.uvs[face.vertices[0]] = Vector2(
-                uv_texture_face.uv1.x, -uv_texture_face.uv1.y)
-            self.uvs[face.vertices[1]] = Vector2(
-                uv_texture_face.uv2.x, -uv_texture_face.uv2.y)
-            self.uvs[face.vertices[2]] = Vector2(
-                uv_texture_face.uv3.x, -uv_texture_face.uv3.y)
+            i0 = self.get_or_add_face(
+                face.vertices[0], uv_texture_face.uv1, None if face.use_smooth else face.normal)
+            i1 = self.get_or_add_face(
+                face.vertices[1], uv_texture_face.uv2, None if face.use_smooth else face.normal)
+            i2 = self.get_or_add_face(
+                face.vertices[2], uv_texture_face.uv3, None if face.use_smooth else face.normal)
+            i3 = self.get_or_add_face(
+                face.vertices[3], uv_texture_face.uv4, None if face.use_smooth else face.normal)
 
-            self.uvs[face.vertices[2]] = Vector2(
-                uv_texture_face.uv3.x, -uv_texture_face.uv3.y)
-            self.uvs[face.vertices[3]] = Vector2(
-                uv_texture_face.uv4.x, -uv_texture_face.uv4.y)
-            self.uvs[face.vertices[0]] = Vector2(
-                uv_texture_face.uv1.x, -uv_texture_face.uv1.y)
+            return [(i0, i1, i2), (i2, i3, i0)]
 
         else:
             raise Exception(f'face.vertices: {len(face.vertices)}')
 
+    def freeze(self)->Mesh:
+
+        positions = (Vector3 * len(self.faceVertices))()
+        for i, v in enumerate(self.faceVertices):
+            positions[i] = self.positions[v.position_index]
+        position_min, position_max = get_min_max3(positions)
+
+        normals = (Vector3 * len(self.faceVertices))()
+        for i, v in enumerate(self.faceVertices):
+            normals[i] = v.normal if v.normal else self.normals[v.position_index]
+        normal_min, normal_max = get_min_max3(normals)
+
+        uvs = (Vector2 * len(self.faceVertices))()
+        for i, v in enumerate(self.faceVertices):
+            uvs[i] = v.uv
+        uvs_min, uvs_max = get_min_max2(uvs)
+
+        submeshes = [x for x in self.submesh_map.values()]
+        return Mesh(
+            name = self.name,
+            positions = Values(positions, position_min, position_max),
+            normals = Values(normals, normal_min, normal_max),
+            uvs = Values(uvs, uvs_min, uvs_max),
+            materials = self.materials,
+            submeshes = submeshes
+        )

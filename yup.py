@@ -23,7 +23,7 @@ class GLTFBuilder:
     def __init__(self):
         self.gltf = gltf.GLTF()
         self.indent = ' ' * 2
-        self.meshes: List[MeshStore] = []
+        self.mesh_stores: List[MeshStore] = []
         self.nodes: List[GLTFBuilderNode] = []
         self.root_nodes: List[GLTFBuilderNode] = []
 
@@ -70,17 +70,17 @@ class GLTFBuilder:
 
         mesh.update(calc_tessface=True)
         uv_texture_faces = get_texture_layer(mesh.tessface_uv_textures)
-        store = MeshStore(mesh.name, mesh.vertices,
-                          uv_texture_faces, mesh.materials)
+        store = MeshStore(mesh.name, mesh.vertices, mesh.materials)
         for i, face in enumerate(mesh.tessfaces):
             submesh = store.get_or_create_submesh(face.material_index)
-            submesh.add_face(face)
-            if uv_texture_faces:
-                store.add_face(face, uv_texture_faces.data[i])
-        store.calc_min_max()
+            for triangle in store.add_face(face, uv_texture_faces.data[i]):
+                for fv in triangle:
+                    submesh.indices.append(fv)
+            #if uv_texture_faces:
+            #    store.add_face(face, uv_texture_faces.data[i])
 
-        index = len(self.meshes)
-        self.meshes.append(store)
+        index = len(self.mesh_stores)
+        self.mesh_stores.append(store)
         return index
 
     def write_to(self, gltf_path: pathlib.Path):
@@ -90,29 +90,31 @@ class GLTFBuilder:
         # material
         material_store = MaterialStore()
 
-        # meshes
+
         meshes: List[gltf.GLTFMesh] = []
-        for mesh in self.meshes:
+        for store in self.mesh_stores:
+
+            mesh = store.freeze()
 
             is_first = True
             primitives: List[gltf.GLTFMeshPrimitive] = []
-            for material_index, submesh in mesh.submesh_map.items():
+            for submesh in mesh.submeshes:
                 if is_first:
                     # attributes
                     attributes = {
-                        'POSITION': buffer.push_bytes(memoryview(mesh.positions), mesh.position_min, mesh.position_max),
-                        'NORMAL': buffer.push_bytes(memoryview(mesh.normals), mesh.normal_min, mesh.normal_max)
+                        'POSITION': buffer.push_bytes(memoryview(mesh.positions.values), mesh.positions.min, mesh.positions.max),
+                        'NORMAL': buffer.push_bytes(memoryview(mesh.normals.values), mesh.normals.min, mesh.normals.max)
                     }
                     is_first = False
                     if mesh.uvs:
                         attributes['TEXCOORD_0'] = buffer.push_bytes(
-                            memoryview(mesh.uvs), mesh.uvs_min, mesh.uvs_max)
+                            memoryview(mesh.uvs.values), mesh.uvs.min, mesh.uvs.max)
 
                 # submesh indices
                 indices_accessor_index = buffer.push_bytes(
                     memoryview(submesh.indices), None, None)
 
-                material = mesh.materials[material_index]
+                material = mesh.materials[submesh.material_index]
                 gltf_material_index = material_store.get_material_index(
                     material, buffer)
 
