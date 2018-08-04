@@ -73,7 +73,7 @@ class GLTFBuilder:
         store = MeshStore(mesh.name, mesh.vertices, mesh.materials)
         for i, face in enumerate(mesh.tessfaces):
             submesh = store.get_or_create_submesh(face.material_index)
-            for triangle in store.add_face(face, uv_texture_faces.data[i]):
+            for triangle in store.add_face(face, uv_texture_faces.data[i] if uv_texture_faces else None):
                 for fv in triangle:
                     submesh.indices.append(fv)
             #if uv_texture_faces:
@@ -114,7 +114,11 @@ class GLTFBuilder:
                 indices_accessor_index = buffer.push_bytes(
                     memoryview(submesh.indices), None, None)
 
-                material = mesh.materials[submesh.material_index]
+                try:
+                    material = mesh.materials[submesh.material_index]
+                except IndexError:
+                    material = None
+
                 gltf_material_index = material_store.get_material_index(
                     material, buffer)
 
