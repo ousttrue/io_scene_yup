@@ -93,6 +93,29 @@ class Values(NamedTuple):
     max: List[float]
 
 
+class BoneWeights(NamedTuple):
+    joints0: memoryview
+    weights0: memoryview
+
+
+class Vector4(ctypes.LittleEndianStructure):
+    _fields_ = [
+        ("x", ctypes.c_float),
+        ("y", ctypes.c_float),
+        ("z", ctypes.c_float),
+        ("w", ctypes.c_float)
+    ]
+
+
+class IVector4(ctypes.LittleEndianStructure):
+    _fields_ = [
+        ("x", ctypes.c_ushort),
+        ("y", ctypes.c_ushort),
+        ("z", ctypes.c_ushort),
+        ("w", ctypes.c_ushort)
+    ]
+
+
 class Mesh(NamedTuple):
     name: str
     positions: Values
@@ -100,6 +123,17 @@ class Mesh(NamedTuple):
     uvs: Optional[Values]
     materials: List[bpy.types.Material]
     submeshes: List[Submesh]
+    # bone weights
+    vertex_groups: List[bpy.types.VertexGroup]
+    fv_to_v_index: Dict[int, int]
+
+    def calc_bone_weights(self)->BoneWeights:
+        joints0 = (IVector4 * len(self.positions.values))()
+        weights0 = (Vector4 * len(self.positions.values))()
+        return BoneWeights(
+            joints0=memoryview(joints0), # type: ignore
+            weights0=memoryview(weights0), # type: ignore
+        )
 
 
 class FaceVertex(NamedTuple):
@@ -115,7 +149,8 @@ class MeshStore:
 
     def __init__(self, name: str,
                  vertices: List[bpy.types.MeshVertex],
-                 materials: List[bpy.types.Material]
+                 materials: List[bpy.types.Material],
+                 vertex_groups: List[bpy.types.VertexGroup]
                  )->None:
         self.name = name
         self.positions: Any = (Vector3 * len(vertices))()
@@ -130,6 +165,8 @@ class MeshStore:
 
         self.faceVertices: List[FaceVertex] = []
         self.faceVertexMap: Dict[FaceVertex, int] = {}
+
+        self.vertex_groups = vertex_groups
 
     def get_or_create_submesh(self, material_index: int)->Submesh:
         if material_index not in self.submesh_map:
@@ -194,8 +231,10 @@ class MeshStore:
     def freeze(self)->Mesh:
 
         positions = (Vector3 * len(self.faceVertices))()
+        fv_to_v_index: Dict[int, int] = {}
         for i, v in enumerate(self.faceVertices):
             positions[i] = self.positions[v.position_index]
+            fv_to_v_index[i] = v.position_index
         position_min, position_max = get_min_max3(positions)
 
         normals = (Vector3 * len(self.faceVertices))()
@@ -218,5 +257,7 @@ class MeshStore:
             normals=Values(normals, normal_min, normal_max),
             uvs=uvs_values if uvs_values else None,
             materials=self.materials,
-            submeshes=submeshes
+            submeshes=submeshes,
+            vertex_groups=self.vertex_groups,
+            fv_to_v_index=fv_to_v_index
         )

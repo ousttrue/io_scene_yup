@@ -3,6 +3,11 @@ Scene importer and exporter for Blender
 
 ![yup](yup.png)
 
+# ToDo
+
+* [ ] JOINTS_0 and WEIGHTS_0
+* [ ] inverseBindMatrices
+
 # Test by blender python module
 
 * https://en.blender.org/index.php/User:Ideasman42/BlenderAsPyModule

@@ -126,7 +126,12 @@ class GLTFBuilder:
                     node.skin = self.get_or_create_skin(node, m.object)
 
             # export
-            node.mesh = self.export_mesh(mesh)
+            bone_weight_groups: List[bpy.types.VertexGroup] = []
+            if node.skin:
+                bonenames = [b.name for b in node.skin.object.data.bones]
+                bone_weight_groups = [
+                    g for g in o.vertex_groups if g.name in bonenames]
+            node.mesh = self.export_mesh(mesh, bone_weight_groups)
 
         elif o.type == 'ARMATURE':
             skin = self.get_or_create_skin(node, o)
@@ -137,7 +142,7 @@ class GLTFBuilder:
 
         return node
 
-    def export_mesh(self, mesh: bpy.types.Mesh)->MeshStore:
+    def export_mesh(self, mesh: bpy.types.Mesh, vertex_groups: List[bpy.types.VertexGroup])->MeshStore:
 
         def get_texture_layer(layers):
             for l in layers:
@@ -146,7 +151,8 @@ class GLTFBuilder:
 
         mesh.update(calc_tessface=True)
         uv_texture_faces = get_texture_layer(mesh.tessface_uv_textures)
-        store = MeshStore(mesh.name, mesh.vertices, mesh.materials)
+        store = MeshStore(mesh.name, mesh.vertices,
+                          mesh.materials, vertex_groups)
         for i, face in enumerate(mesh.tessfaces):
             submesh = store.get_or_create_submesh(face.material_index)
             for triangle in store.add_face(face, uv_texture_faces.data[i] if uv_texture_faces else None):
@@ -172,12 +178,20 @@ class GLTFBuilder:
             primitives: List[gltf.GLTFMeshPrimitive] = []
             for submesh in mesh.submeshes:
                 if is_first:
+                    is_first = False
                     # attributes
                     attributes = {
                         'POSITION': buffer.push_bytes(memoryview(mesh.positions.values), mesh.positions.min, mesh.positions.max),
                         'NORMAL': buffer.push_bytes(memoryview(mesh.normals.values), mesh.normals.min, mesh.normals.max)
                     }
-                    is_first = False
+                    if len(mesh.vertex_groups) > 0:
+                        # bone weights
+                        BoneWeights = mesh.calc_bone_weights()
+                        attributes['JOINTS_0'] = buffer.push_bytes(
+                            BoneWeights.joints0)
+                        attributes['WEIGHTS_0'] = buffer.push_bytes(
+                            BoneWeights.weights0)
+
                     if mesh.uvs:
                         attributes['TEXCOORD_0'] = buffer.push_bytes(
                             memoryview(mesh.uvs.values), mesh.uvs.min, mesh.uvs.max)
@@ -239,6 +253,9 @@ class GLTFBuilder:
             nodes=[self.nodes.index(node) for node in self.root_nodes]
         )
 
+        nodes = [to_gltf_node(node) for node in self.nodes]
+        skins = [to_gltf_skin(skin) for skin in self.skins]
+
         bin_path = gltf_path.parent / (gltf_path.stem + ".bin")
         uri = bin_path.relative_to(gltf_path.parent)
         gltf_root = gltf.GLTF(
@@ -250,9 +267,9 @@ class GLTFBuilder:
             materials=material_store.materials,
             accessors=buffer.accessors,
             meshes=meshes,
-            nodes=[to_gltf_node(node) for node in self.nodes],
+            nodes=nodes,
             scenes=[scene],
-            skins=[to_gltf_skin(skin) for skin in self.skins]
+            skins=skins
         )
 
         # write bin
