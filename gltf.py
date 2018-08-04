@@ -242,6 +242,12 @@ class GLTFScene(NamedTuple):
     nodes: List[int] = []
 
 
+class GLTFSkin(NamedTuple):
+    inverseBindMatrices: int
+    skeleton: int
+    joints: List[int]
+
+
 class GLTF(NamedTuple):
     extensionsUsed: List[str] = []
     asset: GLTFAsset = GLTFAsset()
@@ -255,6 +261,7 @@ class GLTF(NamedTuple):
     meshes: List[GLTFMesh] = []
     nodes: List[GLTFNode] = []
     scenes: List[GLTFScene] = []
+    skins: List[GLTFSkin] = []
 
     def to_json(self):
         return json.dumps(recursive_asdict(self), cls=GLTFEncoder, indent=2)

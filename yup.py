@@ -3,7 +3,7 @@ import mathutils
 import array
 import io
 import pathlib
-from typing import List, NamedTuple, Optional, Dict
+from typing import List, NamedTuple, Optional, Dict, Iterable
 from . import gltf
 from .binarybuffer import BinaryBuffer
 from .meshstore import MeshStore
@@ -11,12 +11,18 @@ from .buffermanager import BufferManager
 from .materialstore import MaterialStore
 
 
-class GLTFBuilderNode:
+class Node:
     def __init__(self, index: int, name: str)->None:
         self.index = index
         self.name = name
-        self.children: List[GLTFBuilderNode] = []
+        self.children: List[Node] = []
         self.mesh: Optional[int] = None
+        self.skin: Optional[Skin] = None
+
+
+class Skin:
+    def __init__(self):
+        self.root_bones: List[Node] = []
 
 
 class GLTFBuilder:
@@ -24,17 +30,20 @@ class GLTFBuilder:
         self.gltf = gltf.GLTF()
         self.indent = ' ' * 2
         self.mesh_stores: List[MeshStore] = []
-        self.nodes: List[GLTFBuilderNode] = []
-        self.root_nodes: List[GLTFBuilderNode] = []
+        self.nodes: List[Node] = []
+        self.root_nodes: List[Node] = []
+
+        self.skins: List[Skin] = []
+        self.armature_map: Dict[bpy.types.Armature, int] = {}
 
     def export_objects(self, objects: List[bpy.types.Object]):
         for o in objects:
             root_node = self.export_object(o)
             self.root_nodes.append(root_node)
 
-    def export_object(self, o: bpy.types.Object, indent: str='')->GLTFBuilderNode:
+    def export_object(self, o: bpy.types.Object, indent: str='')->Node:
 
-        node = GLTFBuilderNode(len(self.nodes), o.name)
+        node = Node(len(self.nodes), o.name)
         self.nodes.append(node)
 
         # only mesh
@@ -48,18 +57,56 @@ class GLTFBuilder:
             mesh = new_obj.data
 
             # apply modifiers exclude armature
-
-            # rotate to Y-UP
+            for m in o.modifiers:
+                # if m.type == 'ARMATURE':
+                    #node.skin = 
+                pass
 
             # export
             mesh_index = self.export_mesh(mesh)
             node.mesh = mesh_index
+
+
+        elif o.type == 'ARMATURE':
+            skin = self.export_armature(o)
+            for root_bone in skin.root_bones:
+                node.children.append(root_bone)
 
         for child in o.children:
             child_node = self.export_object(child, indent+self.indent)
             node.children.append(child_node)
 
         return node
+
+    def export_bone(self, bone: bpy.types.Bone)->Node:
+        node = Node(len(self.nodes), bone.name)
+        self.nodes.append(node)
+
+        for child in bone.children:
+            child_node = self.export_bone(child)
+            node.children.append(child_node)
+
+        return node
+
+    def export_armature(self, o: bpy.types.Object)->Skin:
+        if o in self.armature_map:
+            return self.skins[self.armature_map[o]]
+
+        skin_index = len(self.skins)
+        self.armature_map[o] = skin_index
+        skin = Skin()
+        self.skins.append(skin)
+
+        #
+        # export bones as nodes
+        #
+        armature = o.data
+        for b in armature.bones:
+            if not b.parent:
+                root_bone = self.export_bone(b)
+                skin.root_bones.append(root_bone)
+
+        return skin
 
     def export_mesh(self, mesh: bpy.types.Mesh)->int:
 
@@ -76,7 +123,7 @@ class GLTFBuilder:
             for triangle in store.add_face(face, uv_texture_faces.data[i] if uv_texture_faces else None):
                 for fv in triangle:
                     submesh.indices.append(fv)
-            #if uv_texture_faces:
+            # if uv_texture_faces:
             #    store.add_face(face, uv_texture_faces.data[i])
 
         index = len(self.mesh_stores)
@@ -89,7 +136,6 @@ class GLTFBuilder:
 
         # material
         material_store = MaterialStore()
-
 
         meshes: List[gltf.GLTFMesh] = []
         for store in self.mesh_stores:
@@ -137,7 +183,7 @@ class GLTFBuilder:
             )
             meshes.append(gltf_mesh)
 
-        def to_gltf_node(node: GLTFBuilderNode):
+        def to_gltf_node(node: Node):
             return gltf.GLTFNode(
                 name=node.name,
                 children=[child.index for child in node.children],
