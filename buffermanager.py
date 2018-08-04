@@ -16,7 +16,8 @@ class BufferManager:
         return view_index
 
     def push_bytes(self, values: memoryview,
-                   min: Optional[List[float]], max: Optional[List[float]])->int:
+                   min: Optional[List[float]]=None,
+                   max: Optional[List[float]]=None)->int:
         componentType, element_count = gltf.format_to_componentType(
             values.format)
         # append view

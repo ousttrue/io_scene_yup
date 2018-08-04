@@ -166,6 +166,8 @@ def format_to_componentType(t: str)->Tuple[GLTFAccessorComponentType, int]:
         return GLTFAccessorComponentType.FLOAT, 3
     elif t == 'T{<f:x:<f:y:}':
         return GLTFAccessorComponentType.FLOAT, 2
+    elif t == 'T{<f:_11:<f:_12:<f:_13:<f:_14:<f:_21:<f:_22:<f:_23:<f:_24:<f:_31:<f:_32:<f:_33:<f:_34:<f:_41:<f:_42:<f:_43:<f:_44:}':
+        return GLTFAccessorComponentType.FLOAT, 16
     else:
         raise NotImplementedError()
 
@@ -233,9 +235,10 @@ class GLTFMesh(NamedTuple):
 
 class GLTFNode(NamedTuple):
     name: str
-    mesh: Optional[int]
+    mesh: Optional[int] = None
     children: List[int] = []
-    translation: Tuple[float, float, float] = [0.0, 0.0, 0.0]
+    translation: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    skin: Optional[int] = None
 
 
 class GLTFScene(NamedTuple):

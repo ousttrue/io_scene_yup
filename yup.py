@@ -3,12 +3,41 @@ import mathutils
 import array
 import io
 import pathlib
-from typing import List, NamedTuple, Optional, Dict, Iterable
+import ctypes
+from typing import List, NamedTuple, Optional, Dict, Iterable, Any
 from . import gltf
 from .binarybuffer import BinaryBuffer
 from .meshstore import MeshStore, Vector3_from_meshVertex
 from .buffermanager import BufferManager
 from .materialstore import MaterialStore
+
+
+class Matrix4(ctypes.LittleEndianStructure):
+    _fields_ = [
+        ("_11", ctypes.c_float),
+        ("_12", ctypes.c_float),
+        ("_13", ctypes.c_float),
+        ("_14", ctypes.c_float),
+        ("_21", ctypes.c_float),
+        ("_22", ctypes.c_float),
+        ("_23", ctypes.c_float),
+        ("_24", ctypes.c_float),
+        ("_31", ctypes.c_float),
+        ("_32", ctypes.c_float),
+        ("_33", ctypes.c_float),
+        ("_34", ctypes.c_float),
+        ("_41", ctypes.c_float),
+        ("_42", ctypes.c_float),
+        ("_43", ctypes.c_float),
+        ("_44", ctypes.c_float),
+    ]
+
+    @staticmethod
+    def identity()->Any:
+        return Matrix4(1.0, 0.0, 0.0, 0.0,
+                       0.0, 1.0, 0.0, 0.0,
+                       0.0, 0.0, 1.0, 0.0,
+                       0.0, 0.0, 0.0, 1.0)
 
 
 class Node:
@@ -19,10 +48,21 @@ class Node:
         self.mesh: Optional[MeshStore] = None
         self.skin: Optional[Skin] = None
 
+    def __str__(self)->str:
+        return f'<{self.name}>'
+
+    def traverse(self)->Iterable[Any]:
+        yield self
+
+        for child in self.children:
+            for x in child.traverse():
+                yield x
+
 
 class Skin:
-    def __init__(self):
-        self.root_bones: List[Node] = []
+    def __init__(self, root: Node, o: bpy.types.Object)->None:
+        self.root = root
+        self.object = o
 
 
 class GLTFBuilder:
@@ -32,9 +72,33 @@ class GLTFBuilder:
         self.mesh_stores: List[MeshStore] = []
         self.nodes: List[Node] = []
         self.root_nodes: List[Node] = []
-
         self.skins: List[Skin] = []
-        self.armature_map: Dict[bpy.types.Armature, int] = {}
+
+    def export_bone(self, matrix_world: mathutils.Matrix, bone: bpy.types.Bone)->Node:
+        node = Node(bone.name, bone.head_local)
+        self.nodes.append(node)
+
+        for child in bone.children:
+            child_node = self.export_bone(matrix_world, child)
+            node.children.append(child_node)
+
+        return node
+
+    def get_or_create_skin(self, node: Node, armature_object: bpy.types.Object)->Skin:
+        for skin in self.skins:
+            if skin.object == armature_object:
+                return skin
+
+        skin = Skin(node, armature_object)
+        self.skins.append(skin)
+
+        armature = armature_object.data
+        for b in armature.bones:
+            if not b.parent:
+                root_bone = self.export_bone(armature_object.matrix_world, b)
+                node.children.append(root_bone)
+
+        return skin
 
     def export_objects(self, objects: List[bpy.types.Object]):
         for o in objects:
@@ -55,55 +119,23 @@ class GLTFBuilder:
 
             mesh = new_obj.data
 
-            # apply modifiers exclude armature
-            for m in o.modifiers:
-                # if m.type == 'ARMATURE':
-                    # node.skin =
-                pass
+            # apply modifiers
+            for m in new_obj.modifiers:
+                if m.type == 'ARMATURE':
+                    # skin
+                    node.skin = self.get_or_create_skin(node, m.object)
 
             # export
             node.mesh = self.export_mesh(mesh)
 
         elif o.type == 'ARMATURE':
-            skin = self.export_armature(o)
-            for root_bone in skin.root_bones:
-                node.children.append(root_bone)
+            skin = self.get_or_create_skin(node, o)
 
         for child in o.children:
             child_node = self.export_object(child, indent+self.indent)
             node.children.append(child_node)
 
         return node
-
-    def export_bone(self, matrix_world: mathutils.Matrix, bone: bpy.types.Bone)->Node:
-        node = Node(bone.name, bone.head_local)
-        self.nodes.append(node)
-
-        for child in bone.children:
-            child_node = self.export_bone(matrix_world, child)
-            node.children.append(child_node)
-
-        return node
-
-    def export_armature(self, o: bpy.types.Object)->Skin:
-        if o in self.armature_map:
-            return self.skins[self.armature_map[o]]
-
-        skin_index = len(self.skins)
-        self.armature_map[o] = skin_index
-        skin = Skin()
-        self.skins.append(skin)
-
-        #
-        # export bones as nodes
-        #
-        armature = o.data
-        for b in armature.bones:
-            if not b.parent:
-                root_bone = self.export_bone(o.matrix_world, b)
-                skin.root_bones.append(root_bone)
-
-        return skin
 
     def export_mesh(self, mesh: bpy.types.Mesh)->MeshStore:
 
@@ -152,7 +184,7 @@ class GLTFBuilder:
 
                 # submesh indices
                 indices_accessor_index = buffer.push_bytes(
-                    memoryview(submesh.indices), None, None)
+                    memoryview(submesh.indices))
 
                 try:
                     material = mesh.materials[submesh.material_index]
@@ -183,7 +215,23 @@ class GLTFBuilder:
                 children=[self.nodes.index(child) for child in node.children],
                 translation=(node.position.x,
                              node.position.y, node.position.z),
-                mesh=self.mesh_stores.index(node.mesh) if node.mesh else None
+                mesh=self.mesh_stores.index(node.mesh) if node.mesh else None,
+                skin=self.skins.index(node.skin) if node.skin else None
+            )
+
+        def to_gltf_skin(skin: Skin):
+            joints = [joint for joint in skin.root.traverse()]
+
+            matrices = (Matrix4 * len(joints))()
+            for i, _ in enumerate(joints):
+                matrices[i] = Matrix4.identity()
+            matrix_index = buffer.push_bytes(
+                memoryview(matrices))  # type: ignore
+
+            return gltf.GLTFSkin(
+                inverseBindMatrices=matrix_index,
+                skeleton=self.nodes.index(skin.root),
+                joints=[self.nodes.index(joint) for joint in joints]
             )
 
         scene = gltf.GLTFScene(
@@ -203,7 +251,8 @@ class GLTFBuilder:
             accessors=buffer.accessors,
             meshes=meshes,
             nodes=[to_gltf_node(node) for node in self.nodes],
-            scenes=[scene]
+            scenes=[scene],
+            skins=[to_gltf_skin(skin) for skin in self.skins]
         )
 
         # write bin
