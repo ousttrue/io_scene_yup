@@ -235,6 +235,7 @@ class GLTFNode(NamedTuple):
     name: str
     mesh: Optional[int]
     children: List[int] = []
+    translation: Tuple[float, float, float] = [0.0, 0.0, 0.0]
 
 
 class GLTFScene(NamedTuple):

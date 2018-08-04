@@ -6,15 +6,16 @@ import pathlib
 from typing import List, NamedTuple, Optional, Dict, Iterable
 from . import gltf
 from .binarybuffer import BinaryBuffer
-from .meshstore import MeshStore
+from .meshstore import MeshStore, Vector3_from_meshVertex
 from .buffermanager import BufferManager
 from .materialstore import MaterialStore
 
 
 class Node:
-    def __init__(self, index: int, name: str)->None:
+    def __init__(self, index: int, name: str, position: mathutils.Vector)->None:
         self.index = index
         self.name = name
+        self.position = Vector3_from_meshVertex(position)
         self.children: List[Node] = []
         self.mesh: Optional[int] = None
         self.skin: Optional[Skin] = None
@@ -42,8 +43,7 @@ class GLTFBuilder:
             self.root_nodes.append(root_node)
 
     def export_object(self, o: bpy.types.Object, indent: str='')->Node:
-
-        node = Node(len(self.nodes), o.name)
+        node = Node(len(self.nodes), o.name, o.matrix_world.to_translation())
         self.nodes.append(node)
 
         # only mesh
@@ -59,13 +59,12 @@ class GLTFBuilder:
             # apply modifiers exclude armature
             for m in o.modifiers:
                 # if m.type == 'ARMATURE':
-                    #node.skin = 
+                    # node.skin =
                 pass
 
             # export
             mesh_index = self.export_mesh(mesh)
             node.mesh = mesh_index
-
 
         elif o.type == 'ARMATURE':
             skin = self.export_armature(o)
@@ -78,12 +77,12 @@ class GLTFBuilder:
 
         return node
 
-    def export_bone(self, bone: bpy.types.Bone)->Node:
-        node = Node(len(self.nodes), bone.name)
+    def export_bone(self, matrix_world: mathutils.Matrix, bone: bpy.types.Bone)->Node:
+        node = Node(len(self.nodes), bone.name, bone.head_local)
         self.nodes.append(node)
 
         for child in bone.children:
-            child_node = self.export_bone(child)
+            child_node = self.export_bone(matrix_world, child)
             node.children.append(child_node)
 
         return node
@@ -103,7 +102,7 @@ class GLTFBuilder:
         armature = o.data
         for b in armature.bones:
             if not b.parent:
-                root_bone = self.export_bone(b)
+                root_bone = self.export_bone(o.matrix_world, b)
                 skin.root_bones.append(root_bone)
 
         return skin
@@ -123,8 +122,6 @@ class GLTFBuilder:
             for triangle in store.add_face(face, uv_texture_faces.data[i] if uv_texture_faces else None):
                 for fv in triangle:
                     submesh.indices.append(fv)
-            # if uv_texture_faces:
-            #    store.add_face(face, uv_texture_faces.data[i])
 
         index = len(self.mesh_stores)
         self.mesh_stores.append(store)
@@ -187,6 +184,8 @@ class GLTFBuilder:
             return gltf.GLTFNode(
                 name=node.name,
                 children=[child.index for child in node.children],
+                translation=(node.position.x,
+                             node.position.y, node.position.z),
                 mesh=node.mesh
             )
 
