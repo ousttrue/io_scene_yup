@@ -86,7 +86,10 @@ class MaterialStore:
 
         gltf_material_index = len(self.materials)
         self.material_map[material] = gltf_material_index
-        self.add_material(material, bufferManager)
+        if material:
+            self.add_material(material, bufferManager)
+        else:
+            self.materials.append(gltf.create_default_material())
         return gltf_material_index
 
     def add_material(self, src: bpy.types.Material, bufferManager: BufferManager):

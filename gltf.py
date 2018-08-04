@@ -86,11 +86,11 @@ class GLTFTexture(NamedTuple):
 
 
 class GLTFMaterialPBRMetallicRoughness(NamedTuple):
-    baseColorFactor: Tuple[float, float, float, float]
-    baseColorTexture: Any
-    metallicFactor: float
-    roughnessFactor: float
-    metallicRoughnessTexture: Any
+    baseColorFactor: Tuple[float, float, float, float] = (0.5, 0.5, 0.5, 1.0)
+    baseColorTexture: Any = None
+    metallicFactor: float = 0
+    roughnessFactor: float = 0.9
+    metallicRoughnessTexture: Any = None
 
 
 class TextureInfo(NamedTuple):
@@ -119,13 +119,20 @@ class AlphaMode(Enum):
 class GLTFMaterial(NamedTuple):
     name: str
     pbrMetallicRoughness: GLTFMaterialPBRMetallicRoughness
-    normalTexture: Optional[GLTFMaterialNormalTextureInfo]
-    occlusionTexture: Optional[GLTFMaterialOcclusionTextureInfo]
-    emissiveTexture: Optional[TextureInfo]
-    emissiveFactor: Tuple[float, float, float]
-    alphaMode: AlphaMode
-    alphaCutoff: Optional[float] # for AlphaMode.MASK
+    normalTexture: Optional[GLTFMaterialNormalTextureInfo] = None
+    occlusionTexture: Optional[GLTFMaterialOcclusionTextureInfo] = None
+    emissiveTexture: Optional[TextureInfo] = None
+    emissiveFactor: Tuple[float, float, float] = (0, 0, 0)
+    alphaMode: AlphaMode = AlphaMode.OPAQUE
+    alphaCutoff: Optional[float] = None  # for AlphaMode.MASK
     doubleSided: bool = False
+
+
+def create_default_material()->GLTFMaterial:
+    return GLTFMaterial(
+        name="default",
+        pbrMetallicRoughness=GLTFMaterialPBRMetallicRoughness()
+    )
 
 
 class GLTFBUffer(NamedTuple):
