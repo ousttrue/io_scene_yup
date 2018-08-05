@@ -3,14 +3,18 @@ Scene importer and exporter for Blender
 
 ![yup](yup.png)
 
-# Exporter features
+# ToDo
 
-|ToDo            |  |
+|Exporter features|  |
 |----------------|--|
-|Apply Object TRS|  |
-|Apply Modifiers |  |
+|Z-up to Y-up    |✔️|
+|Unpack image    |  |
+|Apply object TRS|  |
+|Apply modifiers |  |
 |ShapeKeys       |  |
 |Animations      |  |
+|Merge meshes    |  |
+|Remove empty nodes|  |
 
 # Test by blender python module
 
