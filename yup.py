@@ -4,7 +4,7 @@ import array
 import io
 import pathlib
 import ctypes
-from typing import List, NamedTuple, Optional, Dict, Iterable, Any
+from typing import List, NamedTuple, Optional, Dict, Iterable, Any, Tuple
 from . import gltf
 from .binarybuffer import BinaryBuffer
 from .meshstore import MeshStore, Vector3_from_meshVertex
@@ -162,7 +162,7 @@ class GLTFBuilder:
         self.mesh_stores.append(store)
         return store
 
-    def write_to(self, gltf_path: pathlib.Path):
+    def to_gltf(self, gltf_path: pathlib.Path, bin_path: pathlib.Path)->Tuple[gltf.GLTF, bytearray]:
         # create buffer
         buffer = BufferManager()
 
@@ -256,7 +256,6 @@ class GLTFBuilder:
         nodes = [to_gltf_node(node) for node in self.nodes]
         skins = [to_gltf_skin(skin) for skin in self.skins]
 
-        bin_path = gltf_path.parent / (gltf_path.stem + ".bin")
         uri = bin_path.relative_to(gltf_path.parent)
         gltf_root = gltf.GLTF(
             buffers=[gltf.GLTFBUffer(str(uri), len(buffer.buffer.data))],
@@ -272,13 +271,7 @@ class GLTFBuilder:
             skins=skins
         )
 
-        # write bin
-        with bin_path.open('wb') as f:
-            f.write(buffer.buffer.data)
-
-        # write gltf
-        with gltf_path.open('wb') as f:
-            f.write(gltf_root.to_json().encode('utf-8'))
+        return gltf_root, buffer.buffer.data
 
 
 def get_objects(selected_only: bool):
@@ -299,4 +292,13 @@ def export(path: pathlib.Path, selected_only: bool):
     builder = GLTFBuilder()
     builder.export_objects(objects)
 
-    builder.write_to(path)
+    bin_path = path.parent / (path.stem + ".bin")
+    gltf, bin = builder.to_gltf(path, bin_path)
+
+    # write bin
+    with bin_path.open('wb') as f:
+        f.write(bin)
+
+    # write gltf
+    with path.open('wb') as f:
+        f.write(gltf.to_json().encode('utf-8'))
