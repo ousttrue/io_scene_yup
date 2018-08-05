@@ -108,11 +108,11 @@ def to_gltf(self: GLTFBuilder, gltf_path: pathlib.Path, bin_path: Optional[pathl
         meshes.append(to_mesh(store.freeze(bone_names), buffer, material_store))
 
     def to_gltf_node(node: Node):
+        p = node.get_local_position()
         return gltf.GLTFNode(
             name=node.name,
             children=[self.nodes.index(child) for child in node.children],
-            translation=(node.position.x,
-                         node.position.y, node.position.z),
+            translation=(p.x, p.y, p.z),
             mesh=self.mesh_stores.index(node.mesh) if node.mesh else None,
             skin=self.skins.index(node.skin) if node.skin else None
         )
@@ -122,7 +122,7 @@ def to_gltf(self: GLTFBuilder, gltf_path: pathlib.Path, bin_path: Optional[pathl
 
         matrices = (Matrix4 * len(joints))()
         for i, _ in enumerate(joints):
-            p = joints[i].get_local_position()
+            p = joints[i].position
             matrices[i] = Matrix4.translation(-p.x, -p.y, -p.z)
         matrix_index = buffer.push_bytes(f'{skin.root.name}.inverseBindMatrices',
                                          memoryview(matrices))  # type: ignore
