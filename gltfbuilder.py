@@ -3,17 +3,23 @@ from typing import List, Optional, Iterable, Any
 import bpy
 import mathutils
 
-from .meshstore import MeshStore, Vector3_from_meshVertex
+from .meshstore import MeshStore, Vector3_from_meshVertex, Vector3
 from . import gltf
 
 
 class Node:
-    def __init__(self, name: str, position: mathutils.Vector)->None:
+    def __init__(self, name: str, position: mathutils.Vector, parent: Any)->None:
         self.name = name
         self.position = Vector3_from_meshVertex(position)
         self.children: List[Node] = []
         self.mesh: Optional[MeshStore] = None
         self.skin: Optional[Skin] = None
+        self.parent = parent
+
+    def get_local_position(self)->Vector3:
+        if not self.parent:
+            return self.position
+        return self.position - self.parent.position
 
     def __str__(self)->str:
         return f'<{self.name}>'
@@ -41,12 +47,12 @@ class GLTFBuilder:
         self.root_nodes: List[Node] = []
         self.skins: List[Skin] = []
 
-    def export_bone(self, matrix_world: mathutils.Matrix, bone: bpy.types.Bone)->Node:
-        node = Node(bone.name, bone.head_local)
+    def export_bone(self, parent: Node, matrix_world: mathutils.Matrix, bone: bpy.types.Bone)->Node:
+        node = Node(bone.name, bone.head_local, parent)
         self.nodes.append(node)
 
         for child in bone.children:
-            child_node = self.export_bone(matrix_world, child)
+            child_node = self.export_bone(node, matrix_world, child)
             node.children.append(child_node)
 
         return node
@@ -62,18 +68,18 @@ class GLTFBuilder:
         armature = armature_object.data
         for b in armature.bones:
             if not b.parent:
-                root_bone = self.export_bone(armature_object.matrix_world, b)
+                root_bone = self.export_bone(node, armature_object.matrix_world, b)
                 node.children.append(root_bone)
 
         return skin
 
     def export_objects(self, objects: List[bpy.types.Object]):
         for o in objects:
-            root_node = self.export_object(o)
+            root_node = self.export_object(None, o)
             self.root_nodes.append(root_node)
 
-    def export_object(self, o: bpy.types.Object, indent: str='')->Node:
-        node = Node(o.name, o.matrix_world.to_translation())
+    def export_object(self, parent: Optional[Node], o: bpy.types.Object, indent: str='')->Node:
+        node = Node(o.name, o.matrix_world.to_translation(), parent)
         self.nodes.append(node)
 
         # only mesh
@@ -101,7 +107,7 @@ class GLTFBuilder:
             skin = self.get_or_create_skin(node, o)
 
         for child in o.children:
-            child_node = self.export_object(child, indent+self.indent)
+            child_node = self.export_object(node, child, indent+self.indent)
             node.children.append(child_node)
 
         return node

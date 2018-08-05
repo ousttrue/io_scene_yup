@@ -9,7 +9,7 @@ def get_objects(selected_only: bool):
     if selected_only:
         return bpy.context.selected_objects
     else:
-        return bpy.data.scenes[0].objects
+        return [o for o in bpy.data.scenes[0].objects if not o.parent]
 
 
 def export(path: pathlib.Path, selected_only: bool):

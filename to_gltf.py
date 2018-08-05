@@ -122,7 +122,7 @@ def to_gltf(self: GLTFBuilder, gltf_path: pathlib.Path, bin_path: Optional[pathl
 
         matrices = (Matrix4 * len(joints))()
         for i, _ in enumerate(joints):
-            p = joints[i].position
+            p = joints[i].get_local_position()
             matrices[i] = Matrix4.translation(-p.x, -p.y, -p.z)
         matrix_index = buffer.push_bytes(f'{skin.root.name}.inverseBindMatrices',
                                          memoryview(matrices))  # type: ignore

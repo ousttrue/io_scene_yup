@@ -23,6 +23,9 @@ class Vector3(ctypes.LittleEndianStructure):
         ("z", ctypes.c_float)
     ]
 
+    def __sub__(self, rhs):
+        return Vector3(self.x-rhs.x, self.y-rhs.y, self.z-rhs.z)
+
 
 def Vector3_from_meshVertex(v: mathutils.Vector)->Vector3:
     return Vector3(v.x, v.z, -v.y)
