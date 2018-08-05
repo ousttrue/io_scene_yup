@@ -33,11 +33,8 @@ def export(path: pathlib.Path, selected_only: bool):
     #
     # export
     #
-    if ext == '.glb':
-        bin_path = None
-    else:
-        bin_path = path.parent / (path.stem + ".bin")
-    gltf, bin_bytes = to_gltf(builder, path, bin_path)
+    bin_path = path.parent / (path.stem + ".bin")
+    gltf, bin_bytes = to_gltf(builder, path, bin_path if ext!='.glb' else None)
 
     #
     # write

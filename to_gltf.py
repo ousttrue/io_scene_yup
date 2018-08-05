@@ -130,10 +130,8 @@ def to_gltf(self, gltf_path: pathlib.Path, bin_path: Optional[pathlib.Path])->Tu
     nodes = [to_gltf_node(node) for node in self.nodes]
     skins = [to_gltf_skin(skin) for skin in self.skins]
 
-    if bin_path:
-        uri = str(bin_path.relative_to(gltf_path.parent))
-    else:
-        uri = None
+    uri: Optional[str] = str(bin_path.relative_to(
+        gltf_path.parent)) if bin_path else None
     gltf_root = gltf.GLTF(
         buffers=[gltf.GLTFBUffer(uri, len(buffer.buffer.data))],
         bufferViews=buffer.views,

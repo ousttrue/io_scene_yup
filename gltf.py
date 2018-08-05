@@ -136,7 +136,7 @@ def create_default_material()->GLTFMaterial:
 
 
 class GLTFBUffer(NamedTuple):
-    uri: str
+    uri: Optional[str] # None for glb chunk reference
     byteLength: int
 
 
