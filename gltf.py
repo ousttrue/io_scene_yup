@@ -253,6 +253,7 @@ class GLTFScene(NamedTuple):
 
 
 class GLTFSkin(NamedTuple):
+    name: str
     inverseBindMatrices: int
     skeleton: int
     joints: List[int]

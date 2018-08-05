@@ -67,7 +67,8 @@ def to_mesh(mesh: Mesh, buffer: BufferManager, material_store: MaterialStore)->g
                     f'{mesh.name}.WEIGHTS_0', mesh.weights)
 
         # submesh indices
-        indices_accessor_index = buffer.push_bytes(f'{mesh.name}.INDICES', memoryview(submesh.indices))
+        indices_accessor_index = buffer.push_bytes(
+            f'{mesh.name}.INDICES', memoryview(submesh.indices))
 
         try:
             material = mesh.materials[submesh.material_index]
@@ -105,7 +106,8 @@ def to_gltf(self: GLTFBuilder, gltf_path: pathlib.Path, bin_path: Optional[pathl
         bone_names: List[str] = []
         if skin:
             bone_names = [joint.name for joint in skin.root.traverse()]
-        meshes.append(to_mesh(store.freeze(bone_names), buffer, material_store))
+        meshes.append(to_mesh(store.freeze(
+            bone_names), buffer, material_store))
 
     def to_gltf_node(node: Node):
         p = node.get_local_position()
@@ -128,6 +130,7 @@ def to_gltf(self: GLTFBuilder, gltf_path: pathlib.Path, bin_path: Optional[pathl
                                          memoryview(matrices))  # type: ignore
 
         return gltf.GLTFSkin(
+            name=skin.root.name,
             inverseBindMatrices=matrix_index,
             skeleton=self.nodes.index(skin.root),
             joints=[self.nodes.index(joint) for joint in joints]

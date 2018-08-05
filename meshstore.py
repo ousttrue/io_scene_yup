@@ -138,15 +138,16 @@ def PushBoneWeight(self: BoneWeight, i: int, w: float):
         self.i3 = i
         self.weights.w = w
     else:
-        raise NotImplementedError()
+        #raise NotImplementedError()
+        print('over 4')
 
 
 def GetBoneJoints(self: BoneWeight, group_index_to_joint_index: Dict[int, int]):
     return IVector4(
-        group_index_to_joint_index[self.i0],
-        group_index_to_joint_index[self.i1],
-        group_index_to_joint_index[self.i2],
-        group_index_to_joint_index[self.i3]
+        group_index_to_joint_index[self.i0] if self.i0 in group_index_to_joint_index else 0,
+        group_index_to_joint_index[self.i1] if self.i1 in group_index_to_joint_index else 0,
+        group_index_to_joint_index[self.i2] if self.i2 in group_index_to_joint_index else 0,
+        group_index_to_joint_index[self.i3] if self.i3 in group_index_to_joint_index else 0
     )
 
 
@@ -290,7 +291,7 @@ class MeshStore:
         weights = None
         if skin_bone_names and len(skin_bone_names) > 0:
             group_index_to_joint_index = {i: skin_bone_names.index(
-                vertex_group) for i, vertex_group in enumerate(self.vertex_group_names)}
+                vertex_group) for i, vertex_group in enumerate(self.vertex_group_names) if vertex_group in skin_bone_names}
             joints = (IVector4 * len(self.face_vertices))()
             weights = (Vector4 * len(self.face_vertices))()
             for i, v in enumerate(self.face_vertices):
@@ -308,6 +309,6 @@ class MeshStore:
             uvs=uvs_values if uvs_values else None,
             materials=self.materials,
             submeshes=submeshes,
-            joints=memoryview(joints),  # type: ignore
-            weights=memoryview(weights)  # type: ignore
+            joints=memoryview(joints) if joints else None,  # type: ignore
+            weights=memoryview(weights) if weights else None  # type: ignore
         )
