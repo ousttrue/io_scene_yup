@@ -93,12 +93,9 @@ class GLTFBuilder:
                     node.skin = self.get_or_create_skin(node, m.object)
 
             # export
-            bone_weight_groups: List[bpy.types.VertexGroup] = []
-            if node.skin:
-                bonenames = [b.name for b in node.skin.object.data.bones]
-                bone_weight_groups = [
-                    g for g in o.vertex_groups if g.name in bonenames]
-            node.mesh = self.export_mesh(mesh, bone_weight_groups)
+            bone_names = [
+                b.name for b in node.skin.object.data.bones] if node.skin else []
+            node.mesh = self.export_mesh(mesh, o.vertex_groups, bone_names)
 
         elif o.type == 'ARMATURE':
             skin = self.get_or_create_skin(node, o)
@@ -109,7 +106,7 @@ class GLTFBuilder:
 
         return node
 
-    def export_mesh(self, mesh: bpy.types.Mesh, vertex_groups: List[bpy.types.VertexGroup])->MeshStore:
+    def export_mesh(self, mesh: bpy.types.Mesh, vertex_groups: List[bpy.types.VertexGroup], bone_names: List[str])->MeshStore:
 
         def get_texture_layer(layers):
             for l in layers:
@@ -119,7 +116,7 @@ class GLTFBuilder:
         mesh.update(calc_tessface=True)
         uv_texture_faces = get_texture_layer(mesh.tessface_uv_textures)
         store = MeshStore(mesh.name, mesh.vertices,
-                          mesh.materials, vertex_groups)
+                          mesh.materials, vertex_groups, bone_names)
         for i, face in enumerate(mesh.tessfaces):
             submesh = store.get_or_create_submesh(face.material_index)
             for triangle in store.add_face(face, uv_texture_faces.data[i] if uv_texture_faces else None):
@@ -128,3 +125,9 @@ class GLTFBuilder:
 
         self.mesh_stores.append(store)
         return store
+
+    def get_skin_for_store(self, store: MeshStore)->Optional[Skin]:
+        for node in self.nodes:
+            if node.mesh == store:
+                return node.skin
+        return None

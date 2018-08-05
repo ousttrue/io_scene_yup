@@ -1,5 +1,4 @@
 import pathlib
-import time
 import bpy
 import struct
 from .gltfbuilder import GLTFBuilder
@@ -18,8 +17,6 @@ def export(path: pathlib.Path, selected_only: bool):
     # object mode
     if bpy.context.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
-
-    start = time.time()
 
     #
     # gather items
@@ -63,6 +60,3 @@ def export(path: pathlib.Path, selected_only: bool):
             f.write(bin_bytes)
     else:
         raise NotImplementedError()
-
-    elaplsed_time = time.time() - start
-    print(f'elaplsed_time: {elaplsed_time}')

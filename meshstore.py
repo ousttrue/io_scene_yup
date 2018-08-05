@@ -88,14 +88,9 @@ class Submesh:
 
 
 class Values(NamedTuple):
-    values: Any
+    values: memoryview
     min: List[float]
     max: List[float]
-
-
-class BoneWeights(NamedTuple):
-    joints0: memoryview
-    weights0: memoryview
 
 
 class Vector4(ctypes.LittleEndianStructure):
@@ -116,6 +111,42 @@ class IVector4(ctypes.LittleEndianStructure):
     ]
 
 
+class BoneWeight(ctypes.LittleEndianStructure):
+    _fields_ = [
+        ("i0", ctypes.c_int),
+        ("i1", ctypes.c_int),
+        ("i2", ctypes.c_int),
+        ("i3", ctypes.c_int),
+        ("weights", Vector4),
+    ]
+
+
+def PushBoneWeight(self: BoneWeight, i: int, w: float):
+    if self.weights.x == 0:
+        self.i0 = i
+        self.weights.x = w
+    elif self.weights.y == 0:
+        self.i1 = i
+        self.weights.y = w
+    elif self.weights.z == 0:
+        self.i2 = i
+        self.weights.z = w
+    elif self.weights.w == 0:
+        self.i3 = i
+        self.weights.w = w
+    else:
+        raise NotImplementedError()
+
+
+def GetBoneJoints(self: BoneWeight, group_index_to_joint_index: Dict[int, int]):
+    return IVector4(
+        group_index_to_joint_index[self.i0],
+        group_index_to_joint_index[self.i1],
+        group_index_to_joint_index[self.i2],
+        group_index_to_joint_index[self.i3]
+    )
+
+
 class Mesh(NamedTuple):
     name: str
     positions: Values
@@ -123,17 +154,8 @@ class Mesh(NamedTuple):
     uvs: Optional[Values]
     materials: List[bpy.types.Material]
     submeshes: List[Submesh]
-    # bone weights
-    vertex_groups: List[bpy.types.VertexGroup]
-    fv_to_v_index: Dict[int, int]
-
-    def calc_bone_weights(self)->BoneWeights:
-        joints0 = (IVector4 * len(self.positions.values))()
-        weights0 = (Vector4 * len(self.positions.values))()
-        return BoneWeights(
-            joints0=memoryview(joints0), # type: ignore
-            weights0=memoryview(weights0), # type: ignore
-        )
+    joints: Optional[memoryview]
+    weights: Optional[memoryview]
 
 
 class FaceVertex(NamedTuple):
@@ -150,7 +172,8 @@ class MeshStore:
     def __init__(self, name: str,
                  vertices: List[bpy.types.MeshVertex],
                  materials: List[bpy.types.Material],
-                 vertex_groups: List[bpy.types.VertexGroup]
+                 vertex_groups: List[bpy.types.VertexGroup],
+                 bone_names: List[str]
                  )->None:
         self.name = name
         self.positions: Any = (Vector3 * len(vertices))()
@@ -163,10 +186,17 @@ class MeshStore:
 
         self.materials: List[bpy.types.Material] = materials
 
-        self.faceVertices: List[FaceVertex] = []
-        self.faceVertexMap: Dict[FaceVertex, int] = {}
+        self.face_vertices: List[FaceVertex] = []
+        self.face_vertex_map: Dict[FaceVertex, int] = {}
 
-        self.vertex_groups = vertex_groups
+        self.vertex_group_names = [g.name for g in vertex_groups]
+        self.bone_names = bone_names
+        self.bone_weights = (BoneWeight * len(vertices))()
+        for i, v in enumerate(vertices):
+            for ve in v.groups:
+                vg_name = self.vertex_group_names[ve.group]
+                if vg_name in self.bone_names:
+                    PushBoneWeight(self.bone_weights[i], ve.group, ve.weight)
 
     def get_or_create_submesh(self, material_index: int)->Submesh:
         if material_index not in self.submesh_map:
@@ -177,11 +207,11 @@ class MeshStore:
         face = FaceVertex(vertex_index,
                           Vector3_from_meshVertex(normal) if normal else None,
                           Vector2_from_faceUV(uv) if uv else None)
-        if face not in self.faceVertexMap:
-            index = len(self.faceVertices)
-            self.faceVertexMap[face] = index
-            self.faceVertices.append(face)
-        return self.faceVertexMap[face]
+        if face not in self.face_vertex_map:
+            index = len(self.face_vertices)
+            self.face_vertex_map[face] = index
+            self.face_vertices.append(face)
+        return self.face_vertex_map[face]
 
     def add_face(self, face: bpy.types.MeshTessFace, uv_texture_face: Optional[bpy.types.MeshTextureFace])->List[Tuple[int, int, int]]:
 
@@ -228,36 +258,53 @@ class MeshStore:
         else:
             raise Exception(f'face.vertices: {len(face.vertices)}')
 
-    def freeze(self)->Mesh:
+    def freeze(self, skin_bone_names: List[str])->Mesh:
 
-        positions = (Vector3 * len(self.faceVertices))()
+        positions = (Vector3 * len(self.face_vertices))()
         fv_to_v_index: Dict[int, int] = {}
-        for i, v in enumerate(self.faceVertices):
+        for i, v in enumerate(self.face_vertices):
             positions[i] = self.positions[v.position_index]
             fv_to_v_index[i] = v.position_index
         position_min, position_max = get_min_max3(positions)
 
-        normals = (Vector3 * len(self.faceVertices))()
-        for i, v in enumerate(self.faceVertices):
+        normals = (Vector3 * len(self.face_vertices))()
+        for i, v in enumerate(self.face_vertices):
             normals[i] = v.normal if v.normal else self.normals[v.position_index]
         normal_min, normal_max = get_min_max3(normals)
 
         uvs_values = None
-        if any(f.uv for f in self.faceVertices):
-            uvs = (Vector2 * len(self.faceVertices))()
-            for i, v in enumerate(self.faceVertices):
+        if any(f.uv for f in self.face_vertices):
+            uvs = (Vector2 * len(self.face_vertices))()
+            for i, v in enumerate(self.face_vertices):
                 uvs[i] = v.uv
             uvs_min, uvs_max = get_min_max2(uvs)
-            uvs_values = Values(uvs, uvs_min, uvs_max)
+            uvs_values = Values(memoryview(uvs), uvs_min,  # type: ignore
+                                uvs_max)
 
         submeshes = [x for x in self.submesh_map.values()]
+
+        joints = None
+        weights = None
+        if skin_bone_names and len(skin_bone_names) > 0:
+            group_index_to_joint_index = {i: skin_bone_names.index(
+                vertex_group) for i, vertex_group in enumerate(self.vertex_group_names)}
+            joints = (IVector4 * len(self.face_vertices))()
+            weights = (Vector4 * len(self.face_vertices))()
+            for i, v in enumerate(self.face_vertices):
+                index = fv_to_v_index[i]
+                joints[i] = GetBoneJoints(
+                    self.bone_weights[index], group_index_to_joint_index)
+                weights[i] = self.bone_weights[index].weights
+
         return Mesh(
             name=self.name,
-            positions=Values(positions, position_min, position_max),
-            normals=Values(normals, normal_min, normal_max),
+            positions=Values(memoryview(positions), position_min,  # type: ignore
+                             position_max),
+            normals=Values(memoryview(normals), normal_min,  # type: ignore
+                           normal_max),
             uvs=uvs_values if uvs_values else None,
             materials=self.materials,
             submeshes=submeshes,
-            vertex_groups=self.vertex_groups,
-            fv_to_v_index=fv_to_v_index
+            joints=memoryview(joints),  # type: ignore
+            weights=memoryview(weights)  # type: ignore
         )

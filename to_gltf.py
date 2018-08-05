@@ -36,6 +36,13 @@ class Matrix4(ctypes.LittleEndianStructure):
                        0.0, 0.0, 1.0, 0.0,
                        0.0, 0.0, 0.0, 1.0)
 
+    @staticmethod
+    def translation(x: float, y: float, z: float)->Any:
+        return Matrix4(1.0, 0.0, 0.0, 0.0,
+                       0.0, 1.0, 0.0, 0.0,
+                       0.0, 0.0, 1.0, 0.0,
+                       x, y, z, 1.0)
+
 
 def to_mesh(mesh: Mesh, buffer: BufferManager, material_store: MaterialStore)->gltf.GLTFMesh:
     primitives: List[gltf.GLTFMeshPrimitive] = []
@@ -44,25 +51,23 @@ def to_mesh(mesh: Mesh, buffer: BufferManager, material_store: MaterialStore)->g
             # attributes
             attributes = {
                 'POSITION': buffer.push_bytes(f'{mesh.name}.POSITION',
-                                              memoryview(mesh.positions.values), mesh.positions.min, mesh.positions.max),
+                                              mesh.positions.values, mesh.positions.min, mesh.positions.max),
                 'NORMAL': buffer.push_bytes(f'{mesh.name}.NORMAL',
-                                            memoryview(mesh.normals.values), mesh.normals.min, mesh.normals.max)
+                                            mesh.normals.values, mesh.normals.min, mesh.normals.max)
             }
-            if len(mesh.vertex_groups) > 0:
-                # bone weights
-                BoneWeights = mesh.calc_bone_weights()
-                attributes['JOINTS_0'] = buffer.push_bytes(f'{mesh.name}.JOINTS_0',
-                                                           BoneWeights.joints0)
-                attributes['WEIGHTS_0'] = buffer.push_bytes(f'{mesh.name}.WEIGHTS_0',
-                                                            BoneWeights.weights0)
 
             if mesh.uvs:
-                attributes['TEXCOORD_0'] = buffer.push_bytes(f'{mesh.name}.TEXCOORD_0',
-                                                             memoryview(mesh.uvs.values), mesh.uvs.min, mesh.uvs.max)
+                attributes['TEXCOORD_0'] = buffer.push_bytes(
+                    f'{mesh.name}.TEXCOORD_0', mesh.uvs.values, mesh.uvs.min, mesh.uvs.max)
+
+            if mesh.joints and mesh.weights:
+                attributes['JOINTS_0'] = buffer.push_bytes(
+                    f'{mesh.name}.JOINTS_0', mesh.joints)
+                attributes['WEIGHTS_0'] = buffer.push_bytes(
+                    f'{mesh.name}.WEIGHTS_0', mesh.weights)
 
         # submesh indices
-        indices_accessor_index = buffer.push_bytes(f'{mesh.name}.INDICES',
-                                                   memoryview(submesh.indices))
+        indices_accessor_index = buffer.push_bytes(f'{mesh.name}.INDICES', memoryview(submesh.indices))
 
         try:
             material = mesh.materials[submesh.material_index]
@@ -87,15 +92,20 @@ def to_mesh(mesh: Mesh, buffer: BufferManager, material_store: MaterialStore)->g
     )
 
 
-def to_gltf(self, gltf_path: pathlib.Path, bin_path: Optional[pathlib.Path])->Tuple[gltf.GLTF, bytearray]:
+def to_gltf(self: GLTFBuilder, gltf_path: pathlib.Path, bin_path: Optional[pathlib.Path])->Tuple[gltf.GLTF, bytearray]:
     # create buffer
     buffer = BufferManager()
 
     # material
     material_store = MaterialStore()
 
-    meshes: List[gltf.GLTFMesh] = [to_mesh(store.freeze(), buffer, material_store)
-                                   for store in self.mesh_stores]
+    meshes: List[gltf.GLTFMesh] = []
+    for store in self.mesh_stores:
+        skin = self.get_skin_for_store(store)
+        bone_names: List[str] = []
+        if skin:
+            bone_names = [joint.name for joint in skin.root.traverse()]
+        meshes.append(to_mesh(store.freeze(bone_names), buffer, material_store))
 
     def to_gltf_node(node: Node):
         return gltf.GLTFNode(
@@ -112,7 +122,8 @@ def to_gltf(self, gltf_path: pathlib.Path, bin_path: Optional[pathlib.Path])->Tu
 
         matrices = (Matrix4 * len(joints))()
         for i, _ in enumerate(joints):
-            matrices[i] = Matrix4.identity()
+            p = joints[i].position
+            matrices[i] = Matrix4.translation(-p.x, -p.y, -p.z)
         matrix_index = buffer.push_bytes(f'{skin.root.name}.inverseBindMatrices',
                                          memoryview(matrices))  # type: ignore
 
