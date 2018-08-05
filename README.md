@@ -3,10 +3,14 @@ Scene importer and exporter for Blender
 
 ![yup](yup.png)
 
-# ToDo
+# Exporter features
 
-* [ ] JOINTS_0 and WEIGHTS_0
-* [ ] inverseBindMatrices
+|ToDo            |  |
+|----------------|--|
+|Apply Object TRS|  |
+|Apply Modifiers |  |
+|ShapeKeys       |  |
+|Animations      |  |
 
 # Test by blender python module
 
