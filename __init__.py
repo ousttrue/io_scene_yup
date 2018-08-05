@@ -40,8 +40,11 @@ class ExportYUP(bpy.types.Operator):
         default=True)
 
     def execute(self, context):
-        self.filepath = bpy.path.ensure_ext(self.filepath, ".gltf")
+        import os
         import pathlib
+        ext =  os.path.splitext(self.filepath)[1].lower()
+        if ext!='.gltf' and ext!= '.glb':
+            self.filepath = bpy.path.ensure_ext(self.filepath, ".gltf")
         path = pathlib.Path(self.filepath).absolute()
 
         from . import yup

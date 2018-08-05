@@ -1,6 +1,6 @@
 import pathlib
 import ctypes
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 
 from . import gltf
 from .buffermanager import BufferManager
@@ -87,7 +87,7 @@ def to_mesh(mesh: Mesh, buffer: BufferManager, material_store: MaterialStore)->g
     )
 
 
-def to_gltf(self, gltf_path: pathlib.Path, bin_path: pathlib.Path)->Tuple[gltf.GLTF, bytearray]:
+def to_gltf(self, gltf_path: pathlib.Path, bin_path: Optional[pathlib.Path])->Tuple[gltf.GLTF, bytearray]:
     # create buffer
     buffer = BufferManager()
 
@@ -130,9 +130,12 @@ def to_gltf(self, gltf_path: pathlib.Path, bin_path: pathlib.Path)->Tuple[gltf.G
     nodes = [to_gltf_node(node) for node in self.nodes]
     skins = [to_gltf_skin(skin) for skin in self.skins]
 
-    uri = bin_path.relative_to(gltf_path.parent)
+    if bin_path:
+        uri = str(bin_path.relative_to(gltf_path.parent))
+    else:
+        uri = None
     gltf_root = gltf.GLTF(
-        buffers=[gltf.GLTFBUffer(str(uri), len(buffer.buffer.data))],
+        buffers=[gltf.GLTFBUffer(uri, len(buffer.buffer.data))],
         bufferViews=buffer.views,
         images=material_store.images,
         samplers=material_store.samplers,
