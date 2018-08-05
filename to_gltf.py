@@ -43,24 +43,26 @@ def to_mesh(mesh: Mesh, buffer: BufferManager, material_store: MaterialStore)->g
         if i == 0:
             # attributes
             attributes = {
-                'POSITION': buffer.push_bytes(memoryview(mesh.positions.values), mesh.positions.min, mesh.positions.max),
-                'NORMAL': buffer.push_bytes(memoryview(mesh.normals.values), mesh.normals.min, mesh.normals.max)
+                'POSITION': buffer.push_bytes(f'{mesh.name}.POSITION',
+                                              memoryview(mesh.positions.values), mesh.positions.min, mesh.positions.max),
+                'NORMAL': buffer.push_bytes(f'{mesh.name}.NORMAL',
+                                            memoryview(mesh.normals.values), mesh.normals.min, mesh.normals.max)
             }
             if len(mesh.vertex_groups) > 0:
                 # bone weights
                 BoneWeights = mesh.calc_bone_weights()
-                attributes['JOINTS_0'] = buffer.push_bytes(
-                    BoneWeights.joints0)
-                attributes['WEIGHTS_0'] = buffer.push_bytes(
-                    BoneWeights.weights0)
+                attributes['JOINTS_0'] = buffer.push_bytes(f'{mesh.name}.JOINTS_0',
+                                                           BoneWeights.joints0)
+                attributes['WEIGHTS_0'] = buffer.push_bytes(f'{mesh.name}.WEIGHTS_0',
+                                                            BoneWeights.weights0)
 
             if mesh.uvs:
-                attributes['TEXCOORD_0'] = buffer.push_bytes(
-                    memoryview(mesh.uvs.values), mesh.uvs.min, mesh.uvs.max)
+                attributes['TEXCOORD_0'] = buffer.push_bytes(f'{mesh.name}.TEXCOORD_0',
+                                                             memoryview(mesh.uvs.values), mesh.uvs.min, mesh.uvs.max)
 
         # submesh indices
-        indices_accessor_index = buffer.push_bytes(
-            memoryview(submesh.indices))
+        indices_accessor_index = buffer.push_bytes(f'{mesh.name}.INDICES',
+                                                   memoryview(submesh.indices))
 
         try:
             material = mesh.materials[submesh.material_index]
@@ -92,7 +94,7 @@ def to_gltf(self, gltf_path: pathlib.Path, bin_path: pathlib.Path)->Tuple[gltf.G
     # material
     material_store = MaterialStore()
 
-    meshes: List[gltf.GLTFMesh] = [to_mesh(store.freeze(), buffer, material_store) 
+    meshes: List[gltf.GLTFMesh] = [to_mesh(store.freeze(), buffer, material_store)
                                    for store in self.mesh_stores]
 
     def to_gltf_node(node: Node):
@@ -111,8 +113,8 @@ def to_gltf(self, gltf_path: pathlib.Path, bin_path: pathlib.Path)->Tuple[gltf.G
         matrices = (Matrix4 * len(joints))()
         for i, _ in enumerate(joints):
             matrices[i] = Matrix4.identity()
-        matrix_index = buffer.push_bytes(
-            memoryview(matrices))  # type: ignore
+        matrix_index = buffer.push_bytes(f'{skin.root.name}.inverseBindMatrices',
+                                         memoryview(matrices))  # type: ignore
 
         return gltf.GLTFSkin(
             inverseBindMatrices=matrix_index,

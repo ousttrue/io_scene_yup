@@ -141,6 +141,7 @@ class GLTFBUffer(NamedTuple):
 
 
 class GLTFBufferView(NamedTuple):
+    name: str
     buffer: Optional[int]
     byteOffset: int
     byteLength: int
@@ -204,6 +205,7 @@ def accessortype_from_elementCount(count: int)->GLTFAccessorType:
 
 
 class GLTFAccessor(NamedTuple):
+    name: str
     bufferView: int
     byteOffset: int
     componentType: GLTFAccessorComponentType

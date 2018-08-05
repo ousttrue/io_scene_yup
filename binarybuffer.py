@@ -7,7 +7,7 @@ class BinaryBuffer:
         self.index = index
         self.data = bytearray()
 
-    def add_values(self, data: bytes) -> gltf.GLTFBufferView:
+    def add_values(self, name: str, data: bytes) -> gltf.GLTFBufferView:
         # alignment
         if len(self.data) % 4 != 0:
             padding = 4 - len(self.data) % 4
@@ -17,6 +17,7 @@ class BinaryBuffer:
         offset = len(self.data)
         self.data += data
         return gltf.GLTFBufferView(
+            name = name,
             buffer=self.index,
             byteOffset=offset,
             byteLength=len(data)

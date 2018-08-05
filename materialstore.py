@@ -56,7 +56,7 @@ class MaterialStore:
 
         print(f'add_texture: {src.name}')
         png = image_to_png(src)
-        view_index = buffer.add_view(png)
+        view_index = buffer.add_view(src.name, png)
 
         self.images.append(gltf.GLTFImage(
             name=src.name,
