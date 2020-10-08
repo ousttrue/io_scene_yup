@@ -2,16 +2,15 @@ bl_info = {
     "name": "yup gltf exporter",
     "author": "ousttrue",
     "version": (0, 1),
-    "blender": (2, 79, 0),
+    "blender": (2, 83, 0),
     "location": "File > Export > yup gltf-2.0(.gltf)",
     "description": "yup gltf exporter",
     "warning": "",
-    "support": "COMMUNITY",
+    "support": "TESTING",
     "wiki_url": "",
     "tracker_url": "",
     "category": "Import-Export"
 }
-
 
 if "bpy" in locals():
     import importlib
@@ -34,16 +33,15 @@ class ExportYUP(bpy.types.Operator):
 
     # Export options
 
-    selectedonly = BoolProperty(
-        name="Export Selected Objects Only",
-        description="Export only selected objects",
-        default=True)
+    selectedonly = BoolProperty(name="Export Selected Objects Only",
+                                description="Export only selected objects",
+                                default=True)
 
     def execute(self, context):
         import os
         import pathlib
-        ext =  os.path.splitext(self.filepath)[1].lower()
-        if ext!='.gltf' and ext!= '.glb':
+        ext = os.path.splitext(self.filepath)[1].lower()
+        if ext != '.gltf' and ext != '.glb':
             self.filepath = bpy.path.ensure_ext(self.filepath, ".gltf")
         path = pathlib.Path(self.filepath).absolute()
 
@@ -63,16 +61,21 @@ def menu_func(self, context):
     self.layout.operator(ExportYUP.bl_idname, text="YUP GLTF (.gltf)")
 
 
-def register():
-    bpy.utils.register_module(__name__)
+CLASSES = [ExportYUP]
 
-    bpy.types.INFO_MT_file_export.append(menu_func)
+
+def register():
+    for c in CLASSES:
+        bpy.utils.register_class(c)
+
+    bpy.types.TOPBAR_MT_file_export.append(menu_func)
 
 
 def unregister():
-    bpy.utils.unregister_module(__name__)
+    for c in CLASSES:
+        bpy.utils.unregister_class(c)
 
-    bpy.types.INFO_MT_file_export.remove(menu_func)
+    bpy.types.TOPBAR_MT_file_export.remove(menu_func)
 
 
 if __name__ == "__main__":
